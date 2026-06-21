@@ -35,5 +35,27 @@ export function createStore({
       persist();
       return true;
     },
+
+    addRoutine({ name, items = [] }) {
+      const r = { id: genId(), name, items };
+      state.routines.push(r);
+      persist();
+      return r;
+    },
+    listRoutines: () => state.routines,
+    updateRoutine(id, patch) {
+      const r = state.routines.find((x) => x.id === id);
+      if (!r) return null;
+      Object.assign(r, patch);
+      persist();
+      return r;
+    },
+    removeRoutine(id) {
+      const i = state.routines.findIndex((x) => x.id === id);
+      if (i === -1) return false;
+      state.routines.splice(i, 1);
+      persist();
+      return true;
+    },
   };
 }
