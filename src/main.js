@@ -1,7 +1,7 @@
 import { createStore } from './store.js';
-import { renderApp, renderRoutines, renderSession } from './ui.js';
+import { renderApp, renderRoutines, renderSession, renderHistory } from './ui.js';
 import { createRestTimer } from './timer.js';
-import { lastEntryFor } from './history.js';
+import { lastEntryFor, totalVolume } from './history.js';
 
 const store = createStore();
 const root = document.querySelector('#app');
@@ -76,6 +76,15 @@ function render() {
         onStartRest(restSec) { startRest(restSec); },
         onFinish() { activeSessionId = null; stopRest(); tab = 'history'; render(); },
       },
+    });
+  } else if (tab === 'history') {
+    const exercises = store.listExercises();
+    const routines = store.listRoutines();
+    renderHistory(screen, {
+      sessions: store.listSessions(),
+      routineName: (id) => routines.find((r) => r.id === id)?.name ?? '자유 운동',
+      exerciseName: (id) => exercises.find((e) => e.id === id)?.name ?? '(삭제됨)',
+      volumeOf: (s) => totalVolume(s),
     });
   } else if (tab === 'routines') {
     renderRoutines(screen, {

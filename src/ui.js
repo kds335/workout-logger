@@ -80,6 +80,29 @@ export function renderSession(el, { session, routine, exercises, lastEntries, ti
   el.querySelector('#finish').addEventListener('click', () => handlers.onFinish());
 }
 
+export function renderHistory(el, { sessions, routineName, exerciseName, volumeOf }) {
+  el.innerHTML = `<h1>기록</h1><div id="hist"></div>`;
+  const hist = el.querySelector('#hist');
+  if (sessions.length === 0) {
+    hist.innerHTML = `<p class="dim">아직 운동 기록 없음.</p>`;
+    return;
+  }
+  hist.innerHTML = sessions
+    .map((s) => {
+      const lines = s.logs
+        .map((l) => `${exerciseName(l.exerciseId)} — ${l.sets.map((x) => `${x.weight}×${x.reps}`).join(', ')}`)
+        .join('<br>');
+      return `
+      <div class="card">
+        <div class="label">${s.date}</div>
+        <div style="font-size:17px;font-weight:800;margin:4px 0">${routineName(s.routineId)}</div>
+        <div class="dim" style="font-size:13px;margin-bottom:8px">총 볼륨 ${volumeOf(s)} kg</div>
+        <div style="font-size:14px;line-height:1.6">${lines || '<span class="dim">기록 없음</span>'}</div>
+      </div>`;
+    })
+    .join('');
+}
+
 export function renderRoutines(el, { routines, exercises, handlers }) {
   el.innerHTML = `
     <h1>루틴</h1>
