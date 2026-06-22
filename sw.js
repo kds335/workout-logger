@@ -1,8 +1,9 @@
-const CACHE = 'workout-logger-v2';
+const CACHE = 'workout-logger-v3';
 const ASSETS = [
   './', './index.html', './styles.css',
   './src/main.js', './src/ui.js', './src/store.js',
   './src/storage.js', './src/history.js', './src/timer.js',
+  './src/presets.js', './src/calendar.js',
   './manifest.webmanifest', './icon-192.png', './icon-512.png',
 ];
 self.addEventListener('install', (e) => {
