@@ -17,6 +17,69 @@ export function renderApp(root, { tab }) {
   screen.innerHTML = `<h1>${TABS.find((t) => t.id === tab).label}</h1><p class="dim">곧 채워짐</p>`;
 }
 
+function fmtTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+export function renderSession(el, { session, routine, exercises, lastEntries, timer, handlers }) {
+  if (!session) {
+    el.innerHTML = `<h1>운동</h1><p class="dim">루틴 탭에서 "시작"을 눌러 운동을 시작해.</p>`;
+    return;
+  }
+  const nameOf = (id) => exercises.find((e) => e.id === id)?.name ?? '(삭제됨)';
+  const ringStyle = timer
+    ? `background: radial-gradient(closest-side, var(--bg) 79%, transparent 80%), conic-gradient(var(--accent) ${
+        timer.pct
+      }%, var(--surface-2) 0);`
+    : '';
+
+  el.innerHTML = `
+    <h1>운동 중</h1>
+    ${timer ? `<div class="timer-ring" style="${ringStyle}"><div class="t">${fmtTime(timer.remaining)}</div></div><p class="dim" style="text-align:center">휴식 중</p>` : ''}
+    <div id="exercises"></div>
+    <button class="btn-primary" id="finish" style="margin-top:16px;background:var(--surface-2);color:var(--text)">운동 종료</button>
+  `;
+
+  const wrap = el.querySelector('#exercises');
+  const items = routine ? routine.items : session.logs.map((l) => ({ exerciseId: l.exerciseId, restSec: 90 }));
+  wrap.innerHTML = items
+    .map((it) => {
+      const log = session.logs.find((l) => l.exerciseId === it.exerciseId);
+      const sets = log ? log.sets : [];
+      const last = lastEntries[it.exerciseId];
+      const lastHint = last
+        ? `저번(${last.date}): ${last.sets.map((s) => `${s.weight}kg×${s.reps}`).join(', ')}`
+        : '저번 기록 없음';
+      return `
+      <div class="card" data-ex="${it.exerciseId}" data-rest="${it.restSec}">
+        <div style="font-size:18px;font-weight:800;margin-bottom:6px">${nameOf(it.exerciseId)}</div>
+        <div class="last-hint">${lastHint}</div>
+        ${sets.map((s, i) => `<div class="setrow done"><span class="n">${i + 1}</span> ${s.reps}회 <span class="kg">${s.weight} kg ✓</span></div>`).join('')}
+        <div class="set-input">
+          <input type="number" inputmode="decimal" placeholder="kg" class="in-weight">
+          <input type="number" inputmode="numeric" placeholder="회" class="in-reps">
+        </div>
+        <button class="btn-primary log-set">세트 완료</button>
+      </div>`;
+    })
+    .join('');
+
+  wrap.querySelectorAll('[data-ex]').forEach((card) => {
+    const exId = card.dataset.ex;
+    const restSec = Number(card.dataset.rest) || 90;
+    card.querySelector('.log-set').addEventListener('click', () => {
+      const weight = Number(card.querySelector('.in-weight').value);
+      const reps = Number(card.querySelector('.in-reps').value);
+      if (!weight || !reps) return;
+      handlers.onLogSet(exId, { weight, reps });
+      handlers.onStartRest(restSec);
+    });
+  });
+  el.querySelector('#finish').addEventListener('click', () => handlers.onFinish());
+}
+
 export function renderRoutines(el, { routines, exercises, handlers }) {
   el.innerHTML = `
     <h1>루틴</h1>

@@ -46,3 +46,18 @@ button { font: inherit; cursor: pointer; border: none; }
   background: var(--surface); border-radius: var(--radius);
   padding: 16px; margin-bottom: var(--gap);
 }
+.timer-ring {
+  width: 160px; height: 160px; border-radius: 50%; margin: 16px auto;
+  display: flex; align-items: center; justify-content: center;
+}
+.timer-ring .t { font-size: 36px; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; }
+.setrow { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); margin-bottom: var(--gap); }
+.setrow.done { background: #11231b; color: var(--accent); }
+.setrow .n { font-weight: 800; opacity: 0.5; width: 18px; }
+.setrow .kg { margin-left: auto; font-weight: 700; }
+.set-input { display: flex; gap: var(--gap); margin: 12px 0; }
+.set-input input {
+  flex: 1; background: var(--surface-2); border: 1px solid var(--surface-2);
+  color: var(--text); padding: 14px; border-radius: 12px; font-size: 16px; min-height: var(--tap);
+}
+.last-hint { color: var(--text-dim); font-size: 13px; margin-bottom: 8px; }
