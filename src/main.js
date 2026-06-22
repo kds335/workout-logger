@@ -2,7 +2,7 @@ import { createStore } from './store.js';
 import { renderApp, renderRoutines, renderSession, renderHistory, renderCalendar } from './ui.js';
 import { createRestTimer } from './timer.js';
 import { lastEntryFor, groupSessionsByDate } from './history.js';
-import { DEFAULT_EXERCISES } from './presets.js';
+import { DEFAULT_EXERCISES, REST_SEC } from './presets.js';
 import { dateKey, buildMonth } from './calendar.js';
 
 const store = createStore();
@@ -16,6 +16,8 @@ let editingRoutineId = null;
 let restTimer = null;
 let restTotal = 0;
 let restInterval = null;
+let restTarget = REST_SEC; // 현재 휴식의 목표초(±조절 반영) — 세트 기록용
+let lastLoggedExercise = null;
 const _now = new Date();
 let calMonth = { year: _now.getFullYear(), month: _now.getMonth() };
 let selectedDay = null;
@@ -42,6 +44,7 @@ function currentTimerView() {
 function startRest(sec) {
   restTimer = createRestTimer(sec);
   restTotal = sec;
+  restTarget = sec;
   clearInterval(restInterval);
   restInterval = setInterval(() => {
     restTimer.tick(1);
@@ -80,13 +83,20 @@ function render() {
       exercises: store.listExercises(),
       lastEntries: buildLastEntries(),
       timer: currentTimerView(),
+      restSec: REST_SEC,
       handlers: {
-        onLogSet(exId, set) { store.logSet(activeSessionId, exId, set); render(); },
-        onStartRest(restSec) { startRest(restSec); },
+        onLogSet(exId, set) {
+          lastLoggedExercise = exId;
+          store.logSet(activeSessionId, exId, { ...set, restSec: REST_SEC });
+          render();
+        },
+        onStartRest() { startRest(REST_SEC); },
         onAdjustRest(delta) {
           if (!restTimer) return;
           restTimer.add(delta);
           restTotal = Math.max(restTotal, restTimer.remaining); // 링 비율 100% 넘지 않게
+          restTarget = Math.max(0, restTarget + delta);
+          if (lastLoggedExercise) store.updateLastSetRest(activeSessionId, lastLoggedExercise, restTarget);
           render();
         },
         onSkipRest() { stopRest(); render(); },
@@ -116,7 +126,6 @@ function render() {
         },
         onAddExercise(data) { store.addExercise(data); render(); },
         onSeedDefaults() { store.seedExercises(DEFAULT_EXERCISES); render(); },
-        onSetRest(exId, sec) { store.updateExercise(exId, { defaultRestSec: sec }); }, // 폼 유지 위해 render 안 함
         onNewRoutine() { creatingRoutine = true; editingRoutineId = null; render(); },
         onEditRoutine(id) { editingRoutineId = id; creatingRoutine = false; render(); },
         onDeleteRoutine(id) { store.removeRoutine(id); render(); },
@@ -126,7 +135,7 @@ function render() {
           const items = exerciseIds
             .map((id) => byId.get(id))
             .filter(Boolean)
-            .map((ex) => ({ exerciseId: ex.id, targetSets: 3, restSec: ex.defaultRestSec }));
+            .map((ex) => ({ exerciseId: ex.id, targetSets: 3 }));
           if (editingRoutineId) store.updateRoutine(editingRoutineId, { name, items });
           else store.addRoutine({ name, items });
           creatingRoutine = false;

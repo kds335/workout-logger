@@ -96,7 +96,7 @@ export function createStore({
       persist();
       return sess;
     },
-    logSet(sessionId, exerciseId, { weight, reps }) {
+    logSet(sessionId, exerciseId, { weight, reps, restSec }) {
       const sess = state.sessions.find((x) => x.id === sessionId);
       if (!sess) return null;
       let log = sess.logs.find((l) => l.exerciseId === exerciseId);
@@ -104,9 +104,18 @@ export function createStore({
         log = { exerciseId, sets: [] };
         sess.logs.push(log);
       }
-      log.sets.push({ weight, reps });
+      log.sets.push(restSec === undefined ? { weight, reps } : { weight, reps, restSec });
       persist();
       return sess;
+    },
+    // 운동 중 휴식 ±조절 시 방금 기록한 세트의 휴식초를 갱신
+    updateLastSetRest(sessionId, exerciseId, restSec) {
+      const sess = state.sessions.find((x) => x.id === sessionId);
+      if (!sess) return;
+      const log = sess.logs.find((l) => l.exerciseId === exerciseId);
+      if (!log || log.sets.length === 0) return;
+      log.sets[log.sets.length - 1].restSec = restSec;
+      persist();
     },
     getSession: (id) => state.sessions.find((x) => x.id === id) ?? null,
     listSessions: () => [...state.sessions].reverse(),

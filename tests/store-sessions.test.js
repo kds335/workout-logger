@@ -56,3 +56,27 @@ test('없는 세션에 logSet하면 null', () => {
   const s = makeStore();
   assert.equal(s.logSet('nope', 'ex1', { weight: 10, reps: 10 }), null);
 });
+
+test('logSet에 restSec 주면 세트에 기록됨', () => {
+  const s = makeStore();
+  const sess = s.startSession({ routineId: 'r1', date: '2026-06-22' });
+  s.logSet(sess.id, 'ex1', { weight: 50, reps: 12, restSec: 90 });
+  assert.deepEqual(s.getSession(sess.id).logs[0].sets, [{ weight: 50, reps: 12, restSec: 90 }]);
+});
+
+test('updateLastSetRest는 그 운동 마지막 세트 휴식초 갱신', () => {
+  const s = makeStore();
+  const sess = s.startSession({ routineId: 'r1', date: '2026-06-22' });
+  s.logSet(sess.id, 'ex1', { weight: 50, reps: 12, restSec: 90 });
+  s.logSet(sess.id, 'ex1', { weight: 50, reps: 10, restSec: 90 });
+  s.updateLastSetRest(sess.id, 'ex1', 105);
+  const sets = s.getSession(sess.id).logs[0].sets;
+  assert.equal(sets[0].restSec, 90); // 첫 세트 그대로
+  assert.equal(sets[1].restSec, 105); // 마지막만 갱신
+});
+
+test('updateLastSetRest 대상 없으면 조용히 무시', () => {
+  const s = makeStore();
+  const sess = s.startSession({ routineId: 'r1', date: '2026-06-22' });
+  assert.doesNotThrow(() => s.updateLastSetRest(sess.id, 'nope', 60));
+});

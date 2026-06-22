@@ -1,3 +1,6 @@
+// 휴식 시간은 전체 고정 90초(운동 중 ±15초로 조절). 운동별 개별 설정 안 함.
+export const REST_SEC = 90;
+
 // 헬스장 흔한 운동기구 부위별 기본 목록. type = 부위.
 // 복합운동(큰 근육·다관절) 휴식 길게, 고립운동 짧게.
 export const DEFAULT_EXERCISES = [

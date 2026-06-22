@@ -24,7 +24,7 @@ function fmtTime(sec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export function renderSession(el, { session, routine, exercises, lastEntries, timer, handlers }) {
+export function renderSession(el, { session, routine, exercises, lastEntries, timer, restSec, handlers }) {
   if (!session) {
     el.innerHTML = `<h1>운동</h1><p class="dim">루틴 탭에서 "시작"을 눌러 운동을 시작해.</p>`;
     return;
@@ -35,10 +35,6 @@ export function renderSession(el, { session, routine, exercises, lastEntries, ti
         timer.pct
       }%, var(--surface-2) 0);`
     : '';
-
-  // 휴식초 = 운동의 현재 defaultRestSec 라이브, 폴백 item.restSec → 90
-  const restOf = (id, fallback) =>
-    exercises.find((e) => e.id === id)?.defaultRestSec ?? fallback ?? 90;
 
   el.innerHTML = `
     <h1>운동 중</h1>
@@ -71,8 +67,8 @@ export function renderSession(el, { session, routine, exercises, lastEntries, ti
         ? `저번(${last.date}): ${last.sets.map((s) => `${s.weight}kg×${s.reps}`).join(', ')}`
         : '저번 기록 없음';
       return `
-      <div class="card" data-ex="${it.exerciseId}" data-rest="${restOf(it.exerciseId, it.restSec)}">
-        <div style="font-size:18px;font-weight:800;margin-bottom:6px">${nameOf(it.exerciseId)} <span class="dim" style="font-size:13px;font-weight:400">휴식 ${restOf(it.exerciseId, it.restSec)}초</span></div>
+      <div class="card" data-ex="${it.exerciseId}">
+        <div style="font-size:18px;font-weight:800;margin-bottom:6px">${nameOf(it.exerciseId)} <span class="dim" style="font-size:13px;font-weight:400">휴식 ${restSec}초</span></div>
         <div class="last-hint">${lastHint}</div>
         ${sets.map((s, i) => `<div class="setrow done"><span class="n">${i + 1}</span> ${s.reps}회 <span class="kg">${s.weight} kg ✓</span></div>`).join('')}
         <div class="set-input">
@@ -86,13 +82,12 @@ export function renderSession(el, { session, routine, exercises, lastEntries, ti
 
   wrap.querySelectorAll('[data-ex]').forEach((card) => {
     const exId = card.dataset.ex;
-    const restSec = Number(card.dataset.rest) || 90;
     card.querySelector('.log-set').addEventListener('click', () => {
       const weight = Number(card.querySelector('.in-weight').value);
       const reps = Number(card.querySelector('.in-reps').value);
       if (!weight || !reps) return;
       handlers.onLogSet(exId, { weight, reps });
-      handlers.onStartRest(restSec);
+      handlers.onStartRest();
     });
   });
   el.querySelector('#finish').addEventListener('click', () => handlers.onFinish());
@@ -111,7 +106,12 @@ export function renderHistory(el, { groups, routineName, exerciseName }) {
     .map((day, i) => {
       const names = day.routineIds.map(routineName).join(', ');
       const lines = day.logs
-        .map((l) => `${exerciseName(l.exerciseId)} — ${l.sets.map((x) => `${x.weight}×${x.reps}`).join(', ')}`)
+        .map(
+          (l) =>
+            `${exerciseName(l.exerciseId)} — ${l.sets
+              .map((x) => `${x.weight}×${x.reps}${x.restSec ? `<span class="dim"> 휴식${x.restSec}s</span>` : ''}`)
+              .join(', ')}`
+        )
         .join('<br>');
       const exCount = day.logs.length;
       return `
@@ -202,8 +202,7 @@ export function renderRoutines(el, { routines, exercises, creatingRoutine, editi
     const name = window.prompt('운동(기구) 이름?');
     if (!name) return;
     const type = window.prompt('부위 (가슴/등/어깨/삼두/이두/하체/복근/기타)', '가슴') || '기타';
-    const rest = Number(window.prompt('기본 휴식초', '90')) || 90;
-    handlers.onAddExercise({ name, type, defaultRestSec: rest });
+    handlers.onAddExercise({ name, type });
   });
   el.querySelector('#seed-default').addEventListener('click', () => handlers.onSeedDefaults());
   el.querySelector('#add-routine').addEventListener('click', () => handlers.onNewRoutine());
@@ -215,8 +214,7 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
     <h1>${editing ? '루틴 수정' : '새 루틴'}</h1>
     <input id="r-name" type="text" placeholder="루틴 이름 (예: 가슴날)" value="${editing ? editing.name : ''}"
       style="width:100%;padding:12px;font-size:16px;border-radius:10px;border:1px solid var(--surface-2);background:var(--surface);color:var(--text);box-sizing:border-box">
-    <p class="dim" style="font-size:12px;margin:8px 2px 0">휴식초는 운동마다 설정 — 모든 루틴·세션에 같이 적용됨.</p>
-    <div id="ex-pick" style="margin-top:8px"></div>
+    <div id="ex-pick" style="margin-top:14px"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn-primary" id="cancel-routine" style="flex:1;background:var(--surface-2);color:var(--text)">취소</button>
       <button class="btn-primary" id="create-routine" style="flex:2">${editing ? '저장' : '만들기'}</button>
@@ -233,28 +231,15 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
       ${list
         .map(
           (ex) => `
-        <div class="setrow" style="display:flex;align-items:center;gap:10px">
-          <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer">
-            <input type="checkbox" class="ex-check" value="${ex.id}" ${checkedIds.has(ex.id) ? 'checked' : ''} style="width:20px;height:20px;flex:0 0 auto">
-            <span>${ex.name}</span>
-          </label>
-          <input type="number" inputmode="numeric" class="rest-in" data-ex="${ex.id}" value="${ex.defaultRestSec}" aria-label="휴식초"
-            style="width:64px;padding:6px;text-align:right;border-radius:8px;border:1px solid var(--surface-2);background:var(--surface);color:var(--text)">
-          <span class="dim" style="font-size:12px">초</span>
-        </div>`
+        <label class="setrow" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" class="ex-check" value="${ex.id}" ${checkedIds.has(ex.id) ? 'checked' : ''} style="width:20px;height:20px;flex:0 0 auto">
+          <span>${ex.name}</span>
+        </label>`
         )
         .join('')}`
       )
       .join('');
   }
-
-  // 휴식초 입력 변경 → 운동 기본값 갱신(전역)
-  el.querySelectorAll('.rest-in').forEach((inp) =>
-    inp.addEventListener('change', () => {
-      const sec = Number(inp.value);
-      if (sec > 0) handlers.onSetRest(inp.dataset.ex, sec);
-    })
-  );
 
   el.querySelector('#cancel-routine').addEventListener('click', () => handlers.onCancelRoutine());
   el.querySelector('#create-routine').addEventListener('click', () => {
