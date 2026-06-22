@@ -10,5 +10,8 @@ export function createRestTimer(seconds) {
     reset(s) {
       this.remaining = s;
     },
+    add(delta) {
+      this.remaining = Math.max(0, this.remaining + delta);
+    },
   };
 }

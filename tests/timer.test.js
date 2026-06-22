@@ -28,3 +28,16 @@ test('reset으로 다시 설정', () => {
   assert.equal(t.remaining, 60);
   assert.equal(t.isDone, false);
 });
+
+test('add로 시간 늘림', () => {
+  const t = createRestTimer(60);
+  t.add(15);
+  assert.equal(t.remaining, 75);
+});
+
+test('add 음수로 줄이되 0 아래로 안 감', () => {
+  const t = createRestTimer(10);
+  t.add(-15);
+  assert.equal(t.remaining, 0);
+  assert.equal(t.isDone, true);
+});
