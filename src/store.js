@@ -57,5 +57,26 @@ export function createStore({
       persist();
       return true;
     },
+
+    startSession({ routineId = null, date }) {
+      const sess = { id: genId(), date, routineId, logs: [] };
+      state.sessions.push(sess);
+      persist();
+      return sess;
+    },
+    logSet(sessionId, exerciseId, { weight, reps }) {
+      const sess = state.sessions.find((x) => x.id === sessionId);
+      if (!sess) return null;
+      let log = sess.logs.find((l) => l.exerciseId === exerciseId);
+      if (!log) {
+        log = { exerciseId, sets: [] };
+        sess.logs.push(log);
+      }
+      log.sets.push({ weight, reps });
+      persist();
+      return sess;
+    },
+    getSession: (id) => state.sessions.find((x) => x.id === id) ?? null,
+    listSessions: () => [...state.sessions].reverse(),
   };
 }
