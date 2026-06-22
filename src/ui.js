@@ -99,6 +99,7 @@ export function renderSession(el, { session, routine, exercises, lastEntries, ti
 }
 
 // groups = groupSessionsByDate 결과: [{ date, volume, routineIds, logs }]
+// 카드 탭하면 그날 내용 펼침/접힘(기본 접힘).
 export function renderHistory(el, { groups, routineName, exerciseName }) {
   el.innerHTML = `<h1>기록</h1><div id="hist"></div>`;
   const hist = el.querySelector('#hist');
@@ -107,20 +108,36 @@ export function renderHistory(el, { groups, routineName, exerciseName }) {
     return;
   }
   hist.innerHTML = groups
-    .map((day) => {
+    .map((day, i) => {
       const names = day.routineIds.map(routineName).join(', ');
       const lines = day.logs
         .map((l) => `${exerciseName(l.exerciseId)} — ${l.sets.map((x) => `${x.weight}×${x.reps}`).join(', ')}`)
         .join('<br>');
+      const exCount = day.logs.length;
       return `
-      <div class="card">
-        <div class="label">${day.date}</div>
-        ${names ? `<div style="font-size:17px;font-weight:800;margin:4px 0">${names}</div>` : ''}
-        <div class="dim" style="font-size:13px;margin-bottom:8px">총 볼륨 ${day.volume} kg</div>
-        <div style="font-size:14px;line-height:1.6">${lines}</div>
+      <div class="card" data-hist="${i}" style="cursor:pointer">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1">
+            <div class="label">${day.date}</div>
+            ${names ? `<div style="font-size:17px;font-weight:800;margin:4px 0">${names}</div>` : ''}
+            <div class="dim" style="font-size:13px">운동 ${exCount}개 · 총 볼륨 ${day.volume} kg</div>
+          </div>
+          <span class="hist-caret" style="font-size:14px;color:var(--text-dim)">▾</span>
+        </div>
+        <div class="hist-detail" style="display:none;font-size:14px;line-height:1.6;margin-top:10px;padding-top:10px;border-top:1px solid var(--surface-2)">${lines}</div>
       </div>`;
     })
     .join('');
+
+  hist.querySelectorAll('[data-hist]').forEach((card) => {
+    card.addEventListener('click', () => {
+      const detail = card.querySelector('.hist-detail');
+      const caret = card.querySelector('.hist-caret');
+      const open = detail.style.display === 'none';
+      detail.style.display = open ? 'block' : 'none';
+      caret.textContent = open ? '▴' : '▾';
+    });
+  });
 }
 
 // 부위 순서대로 그룹핑. PART_ORDER에 없는 type은 뒤에, type 없으면 '기타'.
