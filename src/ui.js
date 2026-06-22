@@ -103,17 +103,35 @@ export function renderHistory(el, { sessions, routineName, exerciseName, volumeO
     .join('');
 }
 
-export function renderRoutines(el, { routines, exercises, handlers }) {
+// 부위 순서대로 그룹핑. PART_ORDER에 없는 type은 뒤에, type 없으면 '기타'.
+const PART_ORDER = ['가슴', '등', '어깨', '삼두', '이두', '하체', '복근'];
+function groupByPart(exercises) {
+  const groups = new Map();
+  for (const ex of exercises) {
+    const part = ex.type || '기타';
+    if (!groups.has(part)) groups.set(part, []);
+    groups.get(part).push(ex);
+  }
+  const order = [...PART_ORDER, ...[...groups.keys()].filter((p) => !PART_ORDER.includes(p))];
+  return order.filter((p) => groups.has(p)).map((p) => [p, groups.get(p)]);
+}
+
+export function renderRoutines(el, { routines, exercises, creatingRoutine, handlers }) {
+  if (creatingRoutine) {
+    renderRoutineForm(el, { exercises, handlers });
+    return;
+  }
   el.innerHTML = `
     <h1>루틴</h1>
     <div id="routine-list"></div>
-    <button class="btn-primary" id="add-routine" style="margin-top:12px">+ 루틴 추가</button>
-    <button class="btn-primary" id="add-exercise" style="margin-top:8px;background:var(--surface-2);color:var(--text)">+ 운동(기구) 추가</button>
+    <button class="btn-primary" id="add-routine" style="margin-top:12px">+ 루틴 만들기</button>
+    <button class="btn-primary" id="add-exercise" style="margin-top:8px;background:var(--surface-2);color:var(--text)">+ 운동(기구) 직접 추가</button>
+    <button class="btn-primary" id="seed-default" style="margin-top:8px;background:var(--surface-2);color:var(--text)">기본 운동 불러오기</button>
     <div id="exercise-count" class="dim" style="margin-top:12px;font-size:13px"></div>
   `;
   const list = el.querySelector('#routine-list');
   if (routines.length === 0) {
-    list.innerHTML = `<p class="dim">아직 루틴 없음. 운동을 먼저 추가하고 루틴을 만들어봐.</p>`;
+    list.innerHTML = `<p class="dim">아직 루틴 없음. "루틴 만들기"로 운동을 골라 첫 루틴을 만들어봐.</p>`;
   } else {
     list.innerHTML = routines
       .map(
@@ -134,9 +152,52 @@ export function renderRoutines(el, { routines, exercises, handlers }) {
   el.querySelector('#add-exercise').addEventListener('click', () => {
     const name = window.prompt('운동(기구) 이름?');
     if (!name) return;
-    const type = window.prompt('종류 (머신/덤벨/케이블/기타)', '머신') || '기타';
+    const type = window.prompt('부위 (가슴/등/어깨/삼두/이두/하체/복근/기타)', '가슴') || '기타';
     const rest = Number(window.prompt('기본 휴식초', '90')) || 90;
     handlers.onAddExercise({ name, type, defaultRestSec: rest });
   });
-  el.querySelector('#add-routine').addEventListener('click', () => handlers.onAddRoutine());
+  el.querySelector('#seed-default').addEventListener('click', () => handlers.onSeedDefaults());
+  el.querySelector('#add-routine').addEventListener('click', () => handlers.onNewRoutine());
+}
+
+function renderRoutineForm(el, { exercises, handlers }) {
+  el.innerHTML = `
+    <h1>새 루틴</h1>
+    <input id="r-name" type="text" placeholder="루틴 이름 (예: 가슴날)"
+      style="width:100%;padding:12px;font-size:16px;border-radius:10px;border:1px solid var(--surface-2);background:var(--surface);color:var(--text);box-sizing:border-box">
+    <div id="ex-pick" style="margin-top:14px"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn-primary" id="cancel-routine" style="flex:1;background:var(--surface-2);color:var(--text)">취소</button>
+      <button class="btn-primary" id="create-routine" style="flex:2">만들기</button>
+    </div>
+  `;
+  const pick = el.querySelector('#ex-pick');
+  if (exercises.length === 0) {
+    pick.innerHTML = `<p class="dim">등록된 운동이 없음. 먼저 "기본 운동 불러오기"를 눌러줘.</p>`;
+  } else {
+    pick.innerHTML = groupByPart(exercises)
+      .map(
+        ([part, list]) => `
+      <div class="label" style="margin:10px 0 4px">${part}</div>
+      ${list
+        .map(
+          (ex) => `
+        <label class="setrow" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" class="ex-check" value="${ex.id}" style="width:20px;height:20px;flex:0 0 auto">
+          <span>${ex.name}</span>
+        </label>`
+        )
+        .join('')}`
+      )
+      .join('');
+  }
+
+  el.querySelector('#cancel-routine').addEventListener('click', () => handlers.onCancelRoutine());
+  el.querySelector('#create-routine').addEventListener('click', () => {
+    const name = el.querySelector('#r-name').value.trim();
+    const exerciseIds = [...el.querySelectorAll('.ex-check:checked')].map((c) => c.value);
+    if (!name) { window.alert('루틴 이름을 적어줘.'); return; }
+    if (exerciseIds.length === 0) { window.alert('운동을 하나 이상 골라줘.'); return; }
+    handlers.onCreateRoutine({ name, exerciseIds });
+  });
 }

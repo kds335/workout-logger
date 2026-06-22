@@ -2,11 +2,15 @@ import { createStore } from './store.js';
 import { renderApp, renderRoutines, renderSession, renderHistory } from './ui.js';
 import { createRestTimer } from './timer.js';
 import { lastEntryFor, totalVolume } from './history.js';
+import { DEFAULT_EXERCISES } from './presets.js';
 
 const store = createStore();
+// 첫 실행: 운동이 하나도 없으면 기본 운동기구를 미리 채움
+if (store.listExercises().length === 0) store.seedExercises(DEFAULT_EXERCISES);
 const root = document.querySelector('#app');
 let tab = 'routines';
 let activeSessionId = null;
+let creatingRoutine = false;
 let restTimer = null;
 let restTotal = 0;
 let restInterval = null;
@@ -90,6 +94,7 @@ function render() {
     renderRoutines(screen, {
       routines: store.listRoutines(),
       exercises: store.listExercises(),
+      creatingRoutine,
       handlers: {
         onStart(routineId) {
           const sess = store.startSession({ routineId, date: new Date().toISOString().slice(0, 10) });
@@ -98,20 +103,17 @@ function render() {
           render();
         },
         onAddExercise(data) { store.addExercise(data); render(); },
-        onAddRoutine() {
-          const name = window.prompt('루틴 이름?');
-          if (!name) return;
-          const exs = store.listExercises();
-          if (exs.length === 0) { window.alert('운동을 먼저 추가해.'); return; }
-          const picked = window.prompt(
-            '포함할 운동 번호 쉼표로 (예: 1,3)\n' + exs.map((e, i) => `${i + 1}. ${e.name}`).join('\n')
-          );
-          if (!picked) return;
-          const items = picked.split(',').map((s) => {
-            const ex = exs[Number(s.trim()) - 1];
-            return ex ? { exerciseId: ex.id, targetSets: 3, restSec: ex.defaultRestSec } : null;
-          }).filter(Boolean);
+        onSeedDefaults() { store.seedExercises(DEFAULT_EXERCISES); render(); },
+        onNewRoutine() { creatingRoutine = true; render(); },
+        onCancelRoutine() { creatingRoutine = false; render(); },
+        onCreateRoutine({ name, exerciseIds }) {
+          const byId = new Map(store.listExercises().map((e) => [e.id, e]));
+          const items = exerciseIds
+            .map((id) => byId.get(id))
+            .filter(Boolean)
+            .map((ex) => ({ exerciseId: ex.id, targetSets: 3, restSec: ex.defaultRestSec }));
           store.addRoutine({ name, items });
+          creatingRoutine = false;
           render();
         },
       },

@@ -21,6 +21,19 @@ export function createStore({
       return ex;
     },
     listExercises: () => state.exercises,
+    seedExercises(presets) {
+      const have = new Set(state.exercises.map((e) => e.name));
+      const added = [];
+      for (const p of presets) {
+        if (have.has(p.name)) continue;
+        const ex = { id: genId(), name: p.name, type: p.type ?? '기타', defaultRestSec: p.defaultRestSec ?? 90 };
+        state.exercises.push(ex);
+        have.add(p.name);
+        added.push(ex);
+      }
+      if (added.length) persist();
+      return added;
+    },
     updateExercise(id, patch) {
       const ex = state.exercises.find((e) => e.id === id);
       if (!ex) return null;
