@@ -20,7 +20,12 @@ body {
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
-#app { max-width: 480px; margin: 0 auto; min-height: 100%; padding-bottom: 76px; }
+#app {
+  max-width: 480px; margin: 0 auto; min-height: 100%;
+  /* 아이폰 PWA: 상단 상태바(시계)·하단 홈인디케이터 안전영역 확보 */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
 .screen { padding: var(--pad); }
 .screen h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
 .label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
@@ -36,6 +41,8 @@ button { font: inherit; cursor: pointer; border: none; }
   position: fixed; bottom: 0; left: 0; right: 0;
   max-width: 480px; margin: 0 auto;
   display: flex; background: var(--surface); border-top: 1px solid var(--surface-2);
+  /* 하단 홈인디케이터 영역만큼 버튼을 위로 */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .tabbar button {
   flex: 1; background: none; color: var(--text-dim);

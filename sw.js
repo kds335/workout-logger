@@ -1,4 +1,4 @@
-const CACHE = 'workout-logger-v3';
+const CACHE = 'workout-logger-v4';
 const ASSETS = [
   './', './index.html', './styles.css',
   './src/main.js', './src/ui.js', './src/store.js',
