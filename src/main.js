@@ -1,7 +1,7 @@
 import { createStore } from './store.js';
 import { renderApp, renderRoutines, renderSession, renderHistory, renderCalendar } from './ui.js';
 import { createRestTimer } from './timer.js';
-import { lastEntryFor, totalVolume } from './history.js';
+import { lastEntryFor, groupSessionsByDate } from './history.js';
 import { DEFAULT_EXERCISES } from './presets.js';
 import { dateKey, buildMonth } from './calendar.js';
 
@@ -97,10 +97,9 @@ function render() {
     const exercises = store.listExercises();
     const routines = store.listRoutines();
     renderHistory(screen, {
-      sessions: store.listSessions(),
+      groups: groupSessionsByDate(store.listSessions()),
       routineName: (id) => routines.find((r) => r.id === id)?.name ?? '자유 운동',
       exerciseName: (id) => exercises.find((e) => e.id === id)?.name ?? '(삭제됨)',
-      volumeOf: (s) => totalVolume(s),
     });
   } else if (tab === 'routines') {
     renderRoutines(screen, {
@@ -140,7 +139,7 @@ function render() {
     const routines = store.listRoutines();
     renderCalendar(screen, {
       month: buildMonth(calMonth.year, calMonth.month),
-      sessionDates: new Set(store.listSessions().map((s) => s.date)),
+      sessionDates: new Set(store.listSessions().filter((s) => s.logs.length > 0).map((s) => s.date)),
       schedule: store.listSchedule(),
       routines,
       routineName: (id) => routines.find((r) => r.id === id)?.name ?? '(삭제됨)',
