@@ -1,0 +1,48 @@
+:root {
+  --bg: #0d0f14;
+  --surface: #161a22;
+  --surface-2: #1c2230;
+  --accent: #00e599;
+  --accent-ink: #06281e;
+  --text: #ffffff;
+  --text-dim: #6b7280;
+  --radius: 16px;
+  --radius-lg: 28px;
+  --gap: 8px;
+  --pad: 20px;
+  --tap: 44px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+#app { max-width: 480px; margin: 0 auto; min-height: 100%; padding-bottom: 76px; }
+.screen { padding: var(--pad); }
+.screen h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+.dim { color: var(--text-dim); }
+button { font: inherit; cursor: pointer; border: none; }
+.btn-primary {
+  background: var(--accent); color: var(--accent-ink);
+  padding: 16px; border-radius: var(--radius); font-weight: 800; font-size: 16px;
+  width: 100%; min-height: var(--tap); transition: transform 0.12s ease;
+}
+.btn-primary:active { transform: scale(0.97); }
+.tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  max-width: 480px; margin: 0 auto;
+  display: flex; background: var(--surface); border-top: 1px solid var(--surface-2);
+}
+.tabbar button {
+  flex: 1; background: none; color: var(--text-dim);
+  padding: 14px 0 18px; font-size: 12px; font-weight: 700; min-height: var(--tap);
+}
+.tabbar button.active { color: var(--accent); }
+.card {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 16px; margin-bottom: var(--gap);
+}
