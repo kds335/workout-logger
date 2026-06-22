@@ -1,8 +1,9 @@
 import { createStore } from './store.js';
-import { renderApp, renderRoutines, renderSession, renderHistory } from './ui.js';
+import { renderApp, renderRoutines, renderSession, renderHistory, renderCalendar } from './ui.js';
 import { createRestTimer } from './timer.js';
 import { lastEntryFor, totalVolume } from './history.js';
 import { DEFAULT_EXERCISES } from './presets.js';
+import { dateKey, buildMonth } from './calendar.js';
 
 const store = createStore();
 // 첫 실행: 운동이 하나도 없으면 기본 운동기구를 미리 채움
@@ -11,9 +12,13 @@ const root = document.querySelector('#app');
 let tab = 'routines';
 let activeSessionId = null;
 let creatingRoutine = false;
+let editingRoutineId = null;
 let restTimer = null;
 let restTotal = 0;
 let restInterval = null;
+const _now = new Date();
+let calMonth = { year: _now.getFullYear(), month: _now.getMonth() };
+let selectedDay = null;
 
 function getActiveRoutine() {
   const sess = activeSessionId ? store.getSession(activeSessionId) : null;
@@ -78,6 +83,13 @@ function render() {
       handlers: {
         onLogSet(exId, set) { store.logSet(activeSessionId, exId, set); render(); },
         onStartRest(restSec) { startRest(restSec); },
+        onAdjustRest(delta) {
+          if (!restTimer) return;
+          restTimer.add(delta);
+          restTotal = Math.max(restTotal, restTimer.remaining); // 링 비율 100% 넘지 않게
+          render();
+        },
+        onSkipRest() { stopRest(); render(); },
         onFinish() { activeSessionId = null; stopRest(); tab = 'history'; render(); },
       },
     });
@@ -95,27 +107,57 @@ function render() {
       routines: store.listRoutines(),
       exercises: store.listExercises(),
       creatingRoutine,
+      editingRoutine: editingRoutineId ? store.listRoutines().find((r) => r.id === editingRoutineId) ?? null : null,
       handlers: {
         onStart(routineId) {
-          const sess = store.startSession({ routineId, date: new Date().toISOString().slice(0, 10) });
+          const sess = store.startSession({ routineId, date: dateKey(new Date()) });
           activeSessionId = sess.id;
           tab = 'session';
           render();
         },
         onAddExercise(data) { store.addExercise(data); render(); },
         onSeedDefaults() { store.seedExercises(DEFAULT_EXERCISES); render(); },
-        onNewRoutine() { creatingRoutine = true; render(); },
-        onCancelRoutine() { creatingRoutine = false; render(); },
-        onCreateRoutine({ name, exerciseIds }) {
+        onSetRest(exId, sec) { store.updateExercise(exId, { defaultRestSec: sec }); }, // 폼 유지 위해 render 안 함
+        onNewRoutine() { creatingRoutine = true; editingRoutineId = null; render(); },
+        onEditRoutine(id) { editingRoutineId = id; creatingRoutine = false; render(); },
+        onDeleteRoutine(id) { store.removeRoutine(id); render(); },
+        onCancelRoutine() { creatingRoutine = false; editingRoutineId = null; render(); },
+        onSaveRoutine({ name, exerciseIds }) {
           const byId = new Map(store.listExercises().map((e) => [e.id, e]));
           const items = exerciseIds
             .map((id) => byId.get(id))
             .filter(Boolean)
             .map((ex) => ({ exerciseId: ex.id, targetSets: 3, restSec: ex.defaultRestSec }));
-          store.addRoutine({ name, items });
+          if (editingRoutineId) store.updateRoutine(editingRoutineId, { name, items });
+          else store.addRoutine({ name, items });
           creatingRoutine = false;
+          editingRoutineId = null;
           render();
         },
+      },
+    });
+  } else if (tab === 'calendar') {
+    const routines = store.listRoutines();
+    renderCalendar(screen, {
+      month: buildMonth(calMonth.year, calMonth.month),
+      sessionDates: new Set(store.listSessions().map((s) => s.date)),
+      schedule: store.listSchedule(),
+      routines,
+      routineName: (id) => routines.find((r) => r.id === id)?.name ?? '(삭제됨)',
+      selectedDay,
+      handlers: {
+        onPrevMonth() {
+          const m = calMonth.month - 1;
+          calMonth = m < 0 ? { year: calMonth.year - 1, month: 11 } : { year: calMonth.year, month: m };
+          render();
+        },
+        onNextMonth() {
+          const m = calMonth.month + 1;
+          calMonth = m > 11 ? { year: calMonth.year + 1, month: 0 } : { year: calMonth.year, month: m };
+          render();
+        },
+        onSelectDay(dk) { selectedDay = selectedDay === dk ? null : dk; render(); },
+        onAssign(dk, routineId) { store.setSchedule(dk, routineId); render(); },
       },
     });
   }
