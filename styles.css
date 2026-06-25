@@ -53,11 +53,23 @@ button { font: inherit; cursor: pointer; border: none; }
   background: var(--surface); border-radius: var(--radius);
   padding: 16px; margin-bottom: var(--gap);
 }
+/* 휴식 타이머 바: 스크롤 내려도 화면 위에 붙어 따라옴(시간 보려고 위로 안 올라가도 됨) */
+.rest-bar {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--bg);
+  margin: 0 calc(-1 * var(--pad)); padding: 8px var(--pad) 10px;
+  border-bottom: 1px solid var(--surface-2);
+}
 .timer-ring {
-  width: 160px; height: 160px; border-radius: 50%; margin: 16px auto;
+  width: 120px; height: 120px; border-radius: 50%; margin: 8px auto;
   display: flex; align-items: center; justify-content: center;
 }
-.timer-ring .t { font-size: 36px; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; }
+.timer-ring .t { font-size: 30px; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; }
+.ord-btn {
+  width: auto; min-height: 36px; padding: 6px 10px;
+  background: var(--surface); color: var(--text);
+  border-radius: 8px; font-size: 15px; font-weight: 700; flex: 0 0 auto;
+}
 .setrow { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); margin-bottom: var(--gap); }
 .setrow.done { background: #11231b; color: var(--accent); }
 .setrow .n { font-weight: 800; opacity: 0.5; width: 18px; }

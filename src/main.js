@@ -1,5 +1,5 @@
 import { createStore } from './store.js';
-import { renderApp, renderRoutines, renderSession, renderHistory, renderCalendar } from './ui.js';
+import { renderApp, renderRoutines, renderSession, renderHistory, renderCalendar, fmtTime } from './ui.js';
 import { createRestTimer } from './timer.js';
 import { lastEntryFor, groupSessionsByDate } from './history.js';
 import { DEFAULT_EXERCISES, REST_SEC } from './presets.js';
@@ -41,6 +41,15 @@ function currentTimerView() {
   const pct = restTotal ? Math.round((restTimer.remaining / restTotal) * 100) : 0;
   return { remaining: restTimer.remaining, pct };
 }
+// 매초 tick엔 전체 re-render 대신 링/숫자만 갱신 → 입력칸이 안 날아가서 휴식 중에도 키보드 유지·다음 세트 입력 가능
+function updateTimerView() {
+  const view = currentTimerView();
+  const ring = root.querySelector('.timer-ring');
+  if (!ring || !view) return;
+  ring.style.background = `radial-gradient(closest-side, var(--bg) 79%, transparent 80%), conic-gradient(var(--accent) ${view.pct}%, var(--surface-2) 0)`;
+  const t = ring.querySelector('.t');
+  if (t) t.textContent = fmtTime(view.remaining);
+}
 function startRest(sec) {
   restTimer = createRestTimer(sec);
   restTotal = sec;
@@ -48,8 +57,8 @@ function startRest(sec) {
   clearInterval(restInterval);
   restInterval = setInterval(() => {
     restTimer.tick(1);
-    if (restTimer.isDone) { beepAndBuzz(); stopRest(); }
-    render();
+    if (restTimer.isDone) { beepAndBuzz(); stopRest(); render(); return; }
+    updateTimerView();
   }, 1000);
   render();
 }
@@ -97,7 +106,7 @@ function render() {
           restTotal = Math.max(restTotal, restTimer.remaining); // 링 비율 100% 넘지 않게
           restTarget = Math.max(0, restTarget + delta);
           if (lastLoggedExercise) store.updateLastSetRest(activeSessionId, lastLoggedExercise, restTarget);
-          render();
+          updateTimerView();
         },
         onSkipRest() { stopRest(); render(); },
         onFinish() { activeSessionId = null; stopRest(); tab = 'history'; render(); },

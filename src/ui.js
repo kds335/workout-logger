@@ -18,7 +18,7 @@ export function renderApp(root, { tab }) {
   screen.innerHTML = `<h1>${TABS.find((t) => t.id === tab).label}</h1><p class="dim">곧 채워짐</p>`;
 }
 
-function fmtTime(sec) {
+export function fmtTime(sec) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
@@ -39,12 +39,14 @@ export function renderSession(el, { session, routine, exercises, lastEntries, ti
   el.innerHTML = `
     <h1>운동 중</h1>
     ${timer ? `
-      <div class="timer-ring" style="${ringStyle}"><div class="t">${fmtTime(timer.remaining)}</div></div>
-      <p class="dim" style="text-align:center">휴식 중</p>
-      <div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
-        <button class="btn-primary" id="rest-minus" style="flex:1;background:var(--surface-2);color:var(--text)">−15초</button>
-        <button class="btn-primary" id="rest-skip" style="flex:1;background:var(--surface-2);color:var(--text)">건너뛰기</button>
-        <button class="btn-primary" id="rest-plus" style="flex:1;background:var(--surface-2);color:var(--text)">+15초</button>
+      <div class="rest-bar">
+        <div class="timer-ring" style="${ringStyle}"><div class="t">${fmtTime(timer.remaining)}</div></div>
+        <p class="dim" style="text-align:center;margin-top:-4px">휴식 중</p>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
+          <button class="btn-primary" id="rest-minus" style="flex:1;background:var(--surface-2);color:var(--text)">−15초</button>
+          <button class="btn-primary" id="rest-skip" style="flex:1;background:var(--surface-2);color:var(--text)">건너뛰기</button>
+          <button class="btn-primary" id="rest-plus" style="flex:1;background:var(--surface-2);color:var(--text)">+15초</button>
+        </div>
       </div>` : ''}
     <div id="exercises"></div>
     <button class="btn-primary" id="finish" style="margin-top:16px;background:var(--surface-2);color:var(--text)">운동 종료</button>
@@ -209,17 +211,71 @@ export function renderRoutines(el, { routines, exercises, creatingRoutine, editi
 }
 
 function renderRoutineForm(el, { exercises, editing, handlers }) {
-  const checkedIds = editing ? new Set(editing.items.map((it) => it.exerciseId)) : new Set();
+  const byId = new Map(exercises.map((e) => [e.id, e]));
+  const initialIds = editing
+    ? editing.items.map((it) => it.exerciseId).filter((id) => byId.has(id))
+    : [];
   el.innerHTML = `
     <h1>${editing ? '루틴 수정' : '새 루틴'}</h1>
     <input id="r-name" type="text" placeholder="루틴 이름 (예: 가슴날)" value="${editing ? editing.name : ''}"
       style="width:100%;padding:12px;font-size:16px;border-radius:10px;border:1px solid var(--surface-2);background:var(--surface);color:var(--text);box-sizing:border-box">
-    <div id="ex-pick" style="margin-top:14px"></div>
+    <div class="label" style="margin:16px 0 6px">운동 순서 (실제 하는 순서대로 ▲▼로 정렬)</div>
+    <div id="ex-order"></div>
+    <div class="label" style="margin:16px 0 6px">운동 고르기</div>
+    <div id="ex-pick"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn-primary" id="cancel-routine" style="flex:1;background:var(--surface-2);color:var(--text)">취소</button>
       <button class="btn-primary" id="create-routine" style="flex:2">${editing ? '저장' : '만들기'}</button>
     </div>
   `;
+
+  // ── 순서 리스트: 선택된 운동을 실제 하는 순서대로 ▲▼로 재정렬, ✕로 제외 ──
+  const orderWrap = el.querySelector('#ex-order');
+  const orderRow = (id) =>
+    `<div class="setrow" data-ord="${id}" style="display:flex;align-items:center;gap:8px">
+      <span style="flex:1">${byId.get(id)?.name ?? '(삭제됨)'}</span>
+      <button class="ord-btn ord-up">▲</button>
+      <button class="ord-btn ord-down">▼</button>
+      <button class="ord-btn ord-del">✕</button>
+    </div>`;
+  const currentOrder = () => [...orderWrap.querySelectorAll('[data-ord]')].map((r) => r.dataset.ord);
+  function wireOrder() {
+    orderWrap.querySelectorAll('[data-ord]').forEach((row) => {
+      row.querySelector('.ord-up').onclick = () => {
+        const p = row.previousElementSibling;
+        if (p) orderWrap.insertBefore(row, p);
+      };
+      row.querySelector('.ord-down').onclick = () => {
+        const n = row.nextElementSibling;
+        if (n) orderWrap.insertBefore(n, row);
+      };
+      row.querySelector('.ord-del').onclick = () => removeFromOrder(row.dataset.ord);
+    });
+  }
+  function renderEmptyIfNeeded() {
+    if (currentOrder().length === 0) {
+      orderWrap.innerHTML = `<p class="dim" style="font-size:13px">아래에서 운동을 골라봐.</p>`;
+    }
+  }
+  function addToOrder(id) {
+    if (orderWrap.querySelector(`[data-ord="${id}"]`)) return;
+    if (currentOrder().length === 0) orderWrap.innerHTML = ''; // placeholder 제거
+    orderWrap.insertAdjacentHTML('beforeend', orderRow(id));
+    wireOrder();
+  }
+  function removeFromOrder(id) {
+    const row = orderWrap.querySelector(`[data-ord="${id}"]`);
+    if (row) row.remove();
+    const cb = el.querySelector(`.ex-check[value="${id}"]`);
+    if (cb) cb.checked = false;
+    renderEmptyIfNeeded();
+  }
+  orderWrap.innerHTML = initialIds.map(orderRow).join('');
+  wireOrder();
+  renderEmptyIfNeeded();
+
+  // ── 부위별 체크박스: 체크하면 순서 리스트 끝에 추가, 해제하면 제외 ──
+  const checkedIds = new Set(initialIds);
   const pick = el.querySelector('#ex-pick');
   if (exercises.length === 0) {
     pick.innerHTML = `<p class="dim">등록된 운동이 없음. 먼저 "기본 운동 불러오기"를 눌러줘.</p>`;
@@ -239,12 +295,18 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
         .join('')}`
       )
       .join('');
+    pick.querySelectorAll('.ex-check').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) addToOrder(cb.value);
+        else removeFromOrder(cb.value);
+      });
+    });
   }
 
   el.querySelector('#cancel-routine').addEventListener('click', () => handlers.onCancelRoutine());
   el.querySelector('#create-routine').addEventListener('click', () => {
     const name = el.querySelector('#r-name').value.trim();
-    const exerciseIds = [...el.querySelectorAll('.ex-check:checked')].map((c) => c.value);
+    const exerciseIds = currentOrder();
     if (!name) { window.alert('루틴 이름을 적어줘.'); return; }
     if (exerciseIds.length === 0) { window.alert('운동을 하나 이상 골라줘.'); return; }
     handlers.onSaveRoutine({ name, exerciseIds });
