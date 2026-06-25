@@ -1,4 +1,4 @@
-const CACHE = 'workout-logger-v4';
+const CACHE = 'workout-logger-v5';
 const ASSETS = [
   './', './index.html', './styles.css',
   './src/main.js', './src/ui.js', './src/store.js',
@@ -8,6 +8,15 @@ const ASSETS = [
 ];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+  self.skipWaiting(); // 새 SW 바로 활성화(업데이트 즉시 적용)
+});
+// 옛 버전 캐시 삭제 — 안 지우면 caches.match가 stale 파일 반환
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
 });
 self.addEventListener('fetch', (e) => {
   e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
