@@ -1,82 +1,207 @@
 :root {
-  --bg: #0d0f14;
-  --surface: #161a22;
-  --surface-2: #1c2230;
-  --accent: #00e599;
-  --accent-ink: #06281e;
-  --text: #ffffff;
-  --text-dim: #6b7280;
+  /* ── 색: 깊은 잉크빛 다크 + 민트→라임 그라데이션 액센트 ── */
+  --bg: #0a0c11;
+  --bg-grad-1: #0e1320;
+  --bg-grad-2: #0a0c11;
+  --surface: #141925;
+  --surface-2: #1d2433;
+  --surface-3: #283245;
+  --line: rgba(255, 255, 255, 0.07);
+  --accent: #2ff5a8;
+  --accent-2: #8df04e;
+  --accent-grad: linear-gradient(135deg, #2ff5a8 0%, #8df04e 100%);
+  --accent-ink: #042316;
+  --accent-soft: rgba(47, 245, 168, 0.14);
+  --text: #f4f7fb;
+  --text-dim: #7e8aa0;
+  --danger: #ff6b6b;
   --radius: 16px;
-  --radius-lg: 28px;
-  --gap: 8px;
+  --radius-lg: 26px;
+  --radius-sm: 11px;
+  --gap: 9px;
   --pad: 20px;
-  --tap: 44px;
+  --tap: 46px;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+  --shadow-accent: 0 8px 22px rgba(47, 245, 168, 0.28);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
 body {
-  background: var(--bg); color: var(--text);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
+  /* 은은한 메시 그라데이션 배경 — 단색보다 깊이감 */
+  background:
+    radial-gradient(120% 80% at 50% -10%, var(--bg-grad-1) 0%, var(--bg-grad-2) 55%) fixed,
+    var(--bg);
 }
 #app {
   max-width: 480px; margin: 0 auto; min-height: 100%;
-  /* 아이폰 PWA: 상단 상태바(시계)·하단 홈인디케이터 안전영역 확보 */
   padding-top: env(safe-area-inset-top);
-  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
 }
-.screen { padding: var(--pad); }
-.screen h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
-.label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+.screen { padding: var(--pad); animation: screen-in 0.32s var(--ease-spring) both; }
+@keyframes screen-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.screen h1 {
+  font-size: 30px; font-weight: 850; letter-spacing: -0.03em; line-height: 1.1;
+  margin-bottom: 4px;
+}
+.label {
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--accent); font-weight: 800;
+}
 .dim { color: var(--text-dim); }
+
+/* ── 버튼 ── */
 button { font: inherit; cursor: pointer; border: none; }
 .btn-primary {
-  background: var(--accent); color: var(--accent-ink);
-  padding: 16px; border-radius: var(--radius); font-weight: 800; font-size: 16px;
-  width: 100%; min-height: var(--tap); transition: transform 0.12s ease;
+  position: relative;
+  background: var(--accent-grad); color: var(--accent-ink);
+  padding: 15px; border-radius: var(--radius); font-weight: 850; font-size: 16px;
+  letter-spacing: -0.01em;
+  width: 100%; min-height: var(--tap);
+  box-shadow: var(--shadow-accent);
+  transition: transform 0.14s var(--ease-spring), box-shadow 0.14s ease, filter 0.14s ease;
 }
-.btn-primary:active { transform: scale(0.97); }
+.btn-primary:active {
+  transform: scale(0.96);
+  box-shadow: 0 3px 10px rgba(47, 245, 168, 0.22);
+  filter: brightness(1.05);
+}
+/* 보조 버튼: 인라인 style="background:var(--surface-2)..." 도 이 톤으로 보임 */
+.btn-primary[style*="--surface-2"] {
+  box-shadow: var(--shadow-sm) !important;
+  border: 1px solid var(--line);
+}
+.btn-primary[style*="--surface-2"]:active { transform: scale(0.96); filter: brightness(1.12); }
+
+/* ── 탭바: 글래스 + 액티브 알약 인디케이터 ── */
 .tabbar {
   position: fixed; bottom: 0; left: 0; right: 0;
   max-width: 480px; margin: 0 auto;
-  display: flex; background: var(--surface); border-top: 1px solid var(--surface-2);
-  /* 하단 홈인디케이터 영역만큼 버튼을 위로 */
-  padding-bottom: env(safe-area-inset-bottom);
+  display: flex; gap: 4px; padding: 8px 10px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  background: rgba(16, 20, 30, 0.82);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border-top: 1px solid var(--line);
 }
 .tabbar button {
   flex: 1; background: none; color: var(--text-dim);
-  padding: 14px 0 18px; font-size: 12px; font-weight: 700; min-height: var(--tap);
+  padding: 11px 0; font-size: 12px; font-weight: 800; min-height: 40px;
+  border-radius: 13px; letter-spacing: -0.01em;
+  transition: color 0.2s ease, background 0.2s ease, transform 0.12s var(--ease-spring);
 }
-.tabbar button.active { color: var(--accent); }
+.tabbar button:active { transform: scale(0.92); }
+.tabbar button.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ── 카드 ── */
 .card {
-  background: var(--surface); border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--surface) 0%, rgba(20, 25, 37, 0.7) 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 16px; margin-bottom: var(--gap);
+  box-shadow: var(--shadow-sm);
+  animation: card-in 0.34s var(--ease-spring) both;
 }
-/* 휴식 타이머 바: 스크롤 내려도 화면 위에 붙어 따라옴(시간 보려고 위로 안 올라가도 됨) */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+.card[data-hist] { transition: border-color 0.2s ease, transform 0.12s var(--ease-spring); }
+.card[data-hist]:active { transform: scale(0.99); border-color: rgba(47, 245, 168, 0.3); }
+.hist-caret { transition: transform 0.2s ease; }
+
+/* ── 휴식 타이머 ── */
 .rest-bar {
   position: sticky; top: 0; z-index: 5;
-  background: var(--bg);
-  margin: 0 calc(-1 * var(--pad)); padding: 8px var(--pad) 10px;
-  border-bottom: 1px solid var(--surface-2);
+  margin: 0 calc(-1 * var(--pad)) 14px; padding: 12px var(--pad) 16px;
+  background: linear-gradient(180deg, rgba(10, 12, 17, 0.95), rgba(10, 12, 17, 0.78));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  animation: screen-in 0.3s var(--ease-spring) both;
 }
 .timer-ring {
-  width: 120px; height: 120px; border-radius: 50%; margin: 8px auto;
+  width: 128px; height: 128px; border-radius: 50%; margin: 6px auto;
   display: flex; align-items: center; justify-content: center;
+  /* 링 둘레로 부드러운 발광 */
+  box-shadow: 0 0 0 1px var(--line), 0 0 28px var(--accent-soft);
+  position: relative;
 }
-.timer-ring .t { font-size: 30px; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; }
+.timer-ring::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  box-shadow: inset 0 0 18px rgba(47, 245, 168, 0.12);
+}
+.timer-ring .t {
+  font-size: 34px; font-weight: 850; letter-spacing: -0.03em;
+  background: var(--accent-grad); -webkit-background-clip: text;
+  background-clip: text; -webkit-text-fill-color: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 세트 행 ── */
+.setrow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 15px; border-radius: var(--radius-sm);
+  background: var(--surface-2); margin-bottom: var(--gap);
+  border: 1px solid transparent;
+  transition: transform 0.12s var(--ease-spring), border-color 0.2s ease;
+}
+.setrow:active { transform: scale(0.99); }
+.setrow.done {
+  background: linear-gradient(100deg, rgba(47, 245, 168, 0.12), rgba(141, 240, 78, 0.08));
+  border-color: rgba(47, 245, 168, 0.25);
+  color: var(--accent);
+}
+.setrow .n {
+  font-weight: 850; opacity: 0.45; width: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.setrow.done .n { opacity: 0.85; }
+.setrow .kg { margin-left: auto; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* 정렬용 작은 버튼 */
 .ord-btn {
-  width: auto; min-height: 36px; padding: 6px 10px;
-  background: var(--surface); color: var(--text);
-  border-radius: 8px; font-size: 15px; font-weight: 700; flex: 0 0 auto;
+  width: auto; min-height: 36px; padding: 6px 11px;
+  background: var(--surface-3); color: var(--text);
+  border-radius: 9px; font-size: 15px; font-weight: 800; flex: 0 0 auto;
+  transition: transform 0.12s var(--ease-spring), background 0.15s ease;
 }
-.setrow { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); margin-bottom: var(--gap); }
-.setrow.done { background: #11231b; color: var(--accent); }
-.setrow .n { font-weight: 800; opacity: 0.5; width: 18px; }
-.setrow .kg { margin-left: auto; font-weight: 700; }
-.set-input { display: flex; gap: var(--gap); margin: 12px 0; }
-.set-input input {
-  flex: 1; min-width: 0; background: var(--surface-2); border: 1px solid var(--surface-2);
-  color: var(--text); padding: 14px; border-radius: 12px; font-size: 16px; min-height: var(--tap);
+.ord-btn:active { transform: scale(0.9); background: var(--accent-soft); }
+
+/* ── 입력칸 ── */
+.set-input { display: flex; gap: var(--gap); margin: 13px 0; }
+.set-input input,
+input[type="text"], input[type="number"] {
+  flex: 1; min-width: 0; background: var(--surface-2);
+  border: 1px solid var(--line); color: var(--text);
+  padding: 14px; border-radius: 12px; font-size: 16px; min-height: var(--tap);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
-.last-hint { color: var(--text-dim); font-size: 13px; margin-bottom: 8px; }
+.set-input input::placeholder, input::placeholder { color: var(--text-dim); }
+.set-input input:focus,
+input[type="text"]:focus, input[type="number"]:focus {
+  outline: none; background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+input[type="checkbox"] { accent-color: var(--accent); }
+
+.last-hint {
+  color: var(--text-dim); font-size: 13px; margin-bottom: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 달력 칸 탭 피드백 */
+.cal-cell { transition: transform 0.1s var(--ease-spring), background 0.15s ease; }
+.cal-cell:active { transform: scale(0.93); }
