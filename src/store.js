@@ -4,6 +4,27 @@ export const STORAGE_KEY = 'workout-logger/state/v1';
 
 const emptyState = () => ({ exercises: [], routines: [], sessions: [], schedule: {}, notes: {} });
 
+// 백업 파일(또는 raw state)을 안전한 state 모양으로 정규화. 이상한 값은 버림.
+function normalizeState(payload) {
+  const raw = payload && typeof payload === 'object'
+    ? (payload.state && typeof payload.state === 'object' ? payload.state : payload)
+    : {};
+  const arr = (v) => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object' && x.id) : []);
+  const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  return {
+    exercises: arr(raw.exercises),
+    routines: arr(raw.routines),
+    sessions: arr(raw.sessions),
+    schedule: obj(raw.schedule),
+    notes: obj(raw.notes),
+  };
+}
+// id 기준 합집합 — 기존이 우선(같은 id면 안 덮음)
+function mergeById(existing, incoming) {
+  const have = new Set(existing.map((x) => x.id));
+  return existing.concat(incoming.filter((x) => !have.has(x.id)));
+}
+
 // crypto.randomUUID는 secure context(https/localhost)에서만 존재.
 // 폰에서 http://192.168.x 로 열면 비보안이라 undefined → 폴백 사용.
 const defaultGenId = () =>
@@ -129,5 +150,39 @@ export function createStore({
     },
     getSession: (id) => state.sessions.find((x) => x.id === id) ?? null,
     listSessions: () => [...state.sessions].reverse(),
+
+    // ── 백업/복원 ──
+    // 전체 데이터를 파일로 내보낼 스냅샷. app/버전 표식 포함.
+    exportData() {
+      return {
+        app: 'workout-logger',
+        v: 1,
+        state: JSON.parse(JSON.stringify(state)),
+      };
+    },
+    // payload = 파일에서 파싱한 객체. mode 'merge'(기본, 기존 유지하며 합침) | 'replace'(전체 덮기)
+    // 반환: 반영 후 개수 요약
+    importData(payload, mode = 'merge') {
+      const inc = normalizeState(payload);
+      if (mode === 'replace') {
+        state.exercises = inc.exercises;
+        state.routines = inc.routines;
+        state.sessions = inc.sessions;
+        state.schedule = inc.schedule;
+        state.notes = inc.notes;
+      } else {
+        state.exercises = mergeById(state.exercises, inc.exercises);
+        state.routines = mergeById(state.routines, inc.routines);
+        state.sessions = mergeById(state.sessions, inc.sessions);
+        state.schedule = { ...inc.schedule, ...state.schedule }; // 기존 우선
+        state.notes = { ...inc.notes, ...state.notes };
+      }
+      persist();
+      return {
+        exercises: state.exercises.length,
+        routines: state.routines.length,
+        sessions: state.sessions.length,
+      };
+    },
   };
 }

@@ -136,6 +136,36 @@ function render() {
         },
         onAddExercise(data) { store.addExercise(data); render(); },
         onSeedDefaults() { store.seedExercises(DEFAULT_EXERCISES); render(); },
+        onExport() {
+          const dump = store.exportData();
+          const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `workout-backup-${dateKey(new Date())}.json`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        },
+        onImport(file) {
+          const reader = new FileReader();
+          reader.onload = () => {
+            let data;
+            try { data = JSON.parse(reader.result); }
+            catch { window.alert('불러오기 실패: 올바른 백업 파일이 아니야.'); return; }
+            const merge = window.confirm(
+              '복원 방식을 골라줘.\n\n확인 = 지금 데이터에 합치기 (기존 유지, 안전)\n취소 = 전체 덮어쓰기 (현재 기기 데이터 삭제)'
+            );
+            const mode = merge ? 'merge' : 'replace';
+            if (mode === 'replace' && !window.confirm('정말 전체 덮어쓸까? 현재 기기에 저장된 내용은 사라져.')) return;
+            const r = store.importData(data, mode);
+            window.alert(`복원 완료 — 운동 ${r.exercises} · 루틴 ${r.routines} · 기록 ${r.sessions}개`);
+            render();
+          };
+          reader.onerror = () => window.alert('파일을 읽지 못했어.');
+          reader.readAsText(file);
+        },
         onNewRoutine() { creatingRoutine = true; editingRoutineId = null; render(); },
         onEditRoutine(id) { editingRoutineId = id; creatingRoutine = false; render(); },
         onDeleteRoutine(id) { store.removeRoutine(id); render(); },

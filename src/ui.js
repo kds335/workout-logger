@@ -182,6 +182,15 @@ export function renderRoutines(el, { routines, exercises, creatingRoutine, editi
     <button class="btn-primary" id="add-exercise" style="margin-top:8px;background:var(--surface-2);color:var(--text)">+ 운동(기구) 직접 추가</button>
     <button class="btn-primary" id="seed-default" style="margin-top:8px;background:var(--surface-2);color:var(--text)">기본 운동 불러오기</button>
     <div id="exercise-count" class="dim" style="margin-top:12px;font-size:13px"></div>
+    <div class="card" style="margin-top:18px">
+      <div class="label">데이터 백업</div>
+      <p class="dim" style="font-size:13px;margin:7px 0 12px;line-height:1.5">기기가 저장내용을 지울 때 대비. 파일로 저장해두면 언제든 복원 가능.</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn-primary" id="data-export" style="flex:1;background:var(--surface-2);color:var(--text)">↓ 내보내기</button>
+        <button class="btn-primary" id="data-import" style="flex:1;background:var(--surface-2);color:var(--text)">↑ 불러오기</button>
+      </div>
+      <input type="file" id="data-file" accept="application/json,.json" style="display:none">
+    </div>
   `;
   const list = el.querySelector('#routine-list');
   if (routines.length === 0) {
@@ -223,6 +232,15 @@ export function renderRoutines(el, { routines, exercises, creatingRoutine, editi
   });
   el.querySelector('#seed-default').addEventListener('click', () => handlers.onSeedDefaults());
   el.querySelector('#add-routine').addEventListener('click', () => handlers.onNewRoutine());
+
+  el.querySelector('#data-export').addEventListener('click', () => handlers.onExport());
+  const fileInput = el.querySelector('#data-file');
+  el.querySelector('#data-import').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (f) handlers.onImport(f);
+    fileInput.value = ''; // 같은 파일 다시 골라도 change 뜨게
+  });
 }
 
 function renderRoutineForm(el, { exercises, editing, handlers }) {
