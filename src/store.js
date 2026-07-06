@@ -2,7 +2,7 @@ import { createStorage } from './storage.js';
 
 export const STORAGE_KEY = 'workout-logger/state/v1';
 
-const emptyState = () => ({ exercises: [], routines: [], sessions: [], schedule: {} });
+const emptyState = () => ({ exercises: [], routines: [], sessions: [], schedule: {}, notes: {} });
 
 // crypto.randomUUID는 secure context(https/localhost)에서만 존재.
 // 폰에서 http://192.168.x 로 열면 비보안이라 undefined → 폴백 사용.
@@ -89,6 +89,16 @@ export function createStore({
     },
     getSchedule: (date) => state.schedule[date] ?? null,
     listSchedule: () => state.schedule,
+
+    // 그날 총평 메모. 빈 문자열이면 지움.
+    setNote(date, text) {
+      const t = (text ?? '').trim();
+      if (t) state.notes[date] = t;
+      else delete state.notes[date];
+      persist();
+    },
+    getNote: (date) => state.notes[date] ?? null,
+    listNotes: () => state.notes,
 
     startSession({ routineId = null, date }) {
       const sess = { id: genId(), date, routineId, logs: [] };

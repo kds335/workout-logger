@@ -119,6 +119,7 @@ function render() {
       groups: groupSessionsByDate(store.listSessions()),
       routineName: (id) => routines.find((r) => r.id === id)?.name ?? '자유 운동',
       exerciseName: (id) => exercises.find((e) => e.id === id)?.name ?? '(삭제됨)',
+      noteFor: (dk) => store.getNote(dk),
     });
   } else if (tab === 'routines') {
     renderRoutines(screen, {
@@ -159,6 +160,8 @@ function render() {
       month: buildMonth(calMonth.year, calMonth.month),
       sessionDates: new Set(store.listSessions().filter((s) => s.logs.length > 0).map((s) => s.date)),
       schedule: store.listSchedule(),
+      notes: store.listNotes(),
+      todayKey: dateKey(new Date()),
       routines,
       routineName: (id) => routines.find((r) => r.id === id)?.name ?? '(삭제됨)',
       selectedDay,
@@ -175,6 +178,7 @@ function render() {
         },
         onSelectDay(dk) { selectedDay = selectedDay === dk ? null : dk; render(); },
         onAssign(dk, routineId) { store.setSchedule(dk, routineId); render(); },
+        onSaveNote(dk, text) { store.setNote(dk, text); render(); },
       },
     });
   }

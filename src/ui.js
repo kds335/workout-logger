@@ -18,6 +18,12 @@ export function renderApp(root, { tab }) {
   screen.innerHTML = `<h1>${TABS.find((t) => t.id === tab).label}</h1><p class="dim">곧 채워짐</p>`;
 }
 
+export function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+  );
+}
+
 export function fmtTime(sec) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
@@ -72,7 +78,7 @@ export function renderSession(el, { session, routine, exercises, lastEntries, ti
       <div class="card" data-ex="${it.exerciseId}">
         <div style="font-size:18px;font-weight:800;margin-bottom:6px">${nameOf(it.exerciseId)} <span class="dim" style="font-size:13px;font-weight:400">휴식 ${restSec}초</span></div>
         <div class="last-hint">${lastHint}</div>
-        ${sets.map((s, i) => `<div class="setrow done"><span class="n">${i + 1}</span> ${s.reps}회 <span class="kg">${s.weight} kg ✓</span></div>`).join('')}
+        ${sets.map((s, i) => `<div class="setrow done"><span class="n">${i + 1}</span> <span class="setval">${s.weight}<small>kg</small> × ${s.reps}<small>회</small></span> <span class="kg">✓</span></div>`).join('')}
         <div class="set-input">
           <input type="number" inputmode="decimal" placeholder="kg" class="in-weight">
           <input type="number" inputmode="numeric" placeholder="회" class="in-reps">
@@ -97,7 +103,14 @@ export function renderSession(el, { session, routine, exercises, lastEntries, ti
 
 // groups = groupSessionsByDate 결과: [{ date, volume, routineIds, logs }]
 // 카드 탭하면 그날 내용 펼침/접힘(기본 접힘).
-export function renderHistory(el, { groups, routineName, exerciseName }) {
+// noteFor = (dateKey) => 그날 총평 문자열|없으면 falsy
+const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
+function fmtDayLabel(dateKey) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const wd = WEEKDAY_KO[new Date(y, m - 1, d).getDay()];
+  return `${m}월 ${d}일 <span class="dim" style="font-weight:600">(${wd})</span>`;
+}
+export function renderHistory(el, { groups, routineName, exerciseName, noteFor = () => null }) {
   el.innerHTML = `<h1>기록</h1><div id="hist"></div>`;
   const hist = el.querySelector('#hist');
   if (groups.length === 0) {
@@ -107,38 +120,40 @@ export function renderHistory(el, { groups, routineName, exerciseName }) {
   hist.innerHTML = groups
     .map((day, i) => {
       const names = day.routineIds.map(routineName).join(', ');
-      const lines = day.logs
-        .map(
-          (l) =>
-            `${exerciseName(l.exerciseId)} — ${l.sets
-              .map((x) => `${x.weight}×${x.reps}${x.restSec ? `<span class="dim"> 휴식${x.restSec}s</span>` : ''}`)
-              .join(', ')}`
-        )
-        .join('<br>');
+      const note = noteFor(day.date);
+      const rows = day.logs
+        .map((l) => {
+          const chips = l.sets
+            .map((x) => `<span class="set-chip">${x.weight}<small>kg</small>×${x.reps}</span>`)
+            .join('');
+          return `<div class="hist-ex">
+            <div class="hist-ex-name">${exerciseName(l.exerciseId)}</div>
+            <div class="hist-ex-sets">${chips}</div>
+          </div>`;
+        })
+        .join('');
       const exCount = day.logs.length;
+      const totalSets = day.logs.reduce((n, l) => n + l.sets.length, 0);
       return `
-      <div class="card" data-hist="${i}" style="cursor:pointer">
-        <div style="display:flex;align-items:center;gap:8px">
+      <div class="card hist-card" data-hist="${i}">
+        <div class="hist-head">
           <div style="flex:1">
-            <div class="label">${day.date}</div>
-            ${names ? `<div style="font-size:17px;font-weight:800;margin:4px 0">${names}</div>` : ''}
-            <div class="dim" style="font-size:13px">운동 ${exCount}개 · 총 볼륨 ${day.volume} kg</div>
+            <div class="hist-date">${fmtDayLabel(day.date)}</div>
+            ${names ? `<div class="hist-routine">${names}</div>` : ''}
+            <div class="hist-meta">운동 ${exCount} · 세트 ${totalSets} · 볼륨 ${day.volume.toLocaleString()}kg</div>
           </div>
-          <span class="hist-caret" style="font-size:14px;color:var(--text-dim)">▾</span>
+          <span class="hist-caret">▾</span>
         </div>
-        <div class="hist-detail" style="display:none;font-size:14px;line-height:1.6;margin-top:10px;padding-top:10px;border-top:1px solid var(--surface-2)">${lines}</div>
+        <div class="hist-detail">
+          ${rows}
+          ${note ? `<div class="hist-note"><span class="label">총평</span>${escapeHtml(note)}</div>` : ''}
+        </div>
       </div>`;
     })
     .join('');
 
   hist.querySelectorAll('[data-hist]').forEach((card) => {
-    card.addEventListener('click', () => {
-      const detail = card.querySelector('.hist-detail');
-      const caret = card.querySelector('.hist-caret');
-      const open = detail.style.display === 'none';
-      detail.style.display = open ? 'block' : 'none';
-      caret.textContent = open ? '▴' : '▾';
-    });
+    card.addEventListener('click', () => card.classList.toggle('open'));
   });
 }
 
@@ -318,30 +333,33 @@ const MONTH_GRID_HEAD = ['일', '월', '화', '수', '목', '금', '토'];
 // month = { year, month, weeks } (calendar.buildMonth 결과)
 // sessionDates = Set/배열(운동한 dateKey), schedule = { dateKey: routineId }
 // routineName = (id) => 이름, selectedDay = dateKey|null
-export function renderCalendar(el, { month, sessionDates, schedule, routineName, routines, selectedDay, handlers }) {
+export function renderCalendar(el, { month, sessionDates, schedule, notes = {}, todayKey = null, routineName, routines, selectedDay, handlers }) {
   const worked = sessionDates instanceof Set ? sessionDates : new Set(sessionDates);
   const title = `${month.year}년 ${month.month + 1}월`;
 
   el.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between">
-      <button class="btn-primary" id="cal-prev" style="width:48px;background:var(--surface-2);color:var(--text)">◀</button>
+    <div class="cal-nav">
+      <button class="icon-btn" id="cal-prev">◀</button>
       <h1 style="margin:0">${title}</h1>
-      <button class="btn-primary" id="cal-next" style="width:48px;background:var(--surface-2);color:var(--text)">▶</button>
+      <button class="icon-btn" id="cal-next">▶</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:12px">
-      ${MONTH_GRID_HEAD.map((d) => `<div class="dim" style="text-align:center;font-size:12px;padding:4px 0">${d}</div>`).join('')}
+    <div class="cal-grid">
+      ${MONTH_GRID_HEAD.map((d, i) => `<div class="cal-head${i === 0 ? ' sun' : i === 6 ? ' sat' : ''}">${d}</div>`).join('')}
       ${month.weeks
         .flat()
         .map((cell) => {
           if (!cell) return `<div></div>`;
           const did = worked.has(cell.dateKey);
           const rid = schedule[cell.dateKey];
+          const hasNote = !!notes[cell.dateKey];
           const sel = cell.dateKey === selectedDay;
+          const isToday = cell.dateKey === todayKey;
+          const cls = ['cal-cell', did ? 'did' : '', sel ? 'sel' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
           return `
-          <button class="cal-cell" data-day="${cell.dateKey}"
-            style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:2px;padding:4px 2px;border-radius:8px;border:1px solid ${sel ? 'var(--accent)' : 'transparent'};background:var(--surface);color:var(--text);font-size:13px;overflow:hidden">
-            <span>${cell.day}${did ? ' <span style="color:var(--accent)">●</span>' : ''}</span>
-            ${rid ? `<span style="font-size:9px;line-height:1.1;color:var(--accent);text-align:center;word-break:keep-all">${routineName(rid)}</span>` : ''}
+          <button class="${cls}" data-day="${cell.dateKey}">
+            <span class="cal-num">${cell.day}</span>
+            ${rid ? `<span class="cal-tag">${routineName(rid)}</span>` : ''}
+            <span class="cal-marks">${did ? '<i class="mk-did"></i>' : ''}${hasNote ? '<i class="mk-note"></i>' : ''}</span>
           </button>`;
         })
         .join('')}
@@ -359,18 +377,28 @@ export function renderCalendar(el, { month, sessionDates, schedule, routineName,
   if (selectedDay) {
     const [, m, d] = selectedDay.split('-');
     const cur = schedule[selectedDay];
+    const worked_ = worked.has(selectedDay);
+    const note = notes[selectedDay] || '';
     panel.innerHTML = `
       <div class="card">
         <div class="label">${Number(m)}/${Number(d)} 예정 루틴</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+        <div class="chip-row" style="margin-top:8px">
           ${routines.length === 0 ? '<span class="dim">루틴이 없음. 루틴 탭에서 먼저 만들어줘.</span>' : ''}
           ${routines
             .map(
-              (r) => `<button class="btn-primary cal-assign" data-rid="${r.id}"
-                style="flex:0 0 auto;${cur === r.id ? '' : 'background:var(--surface-2);color:var(--text)'}">${r.name}</button>`
+              (r) => `<button class="pill cal-assign${cur === r.id ? ' on' : ''}" data-rid="${r.id}">${r.name}</button>`
             )
             .join('')}
-          ${cur ? `<button class="btn-primary" id="cal-clear" style="flex:0 0 auto;background:var(--surface-2);color:var(--text)">지우기</button>` : ''}
+          ${cur ? `<button class="pill" id="cal-clear">지우기</button>` : ''}
+        </div>
+      </div>
+      <div class="card">
+        <div class="label">${worked_ ? '운동 총평 ✍️' : '이 날 메모'}</div>
+        <textarea id="cal-note" class="note-area" rows="3"
+          placeholder="${worked_ ? '컨디션, 무게 느낌, 다음에 바꿀 점…' : '이 날에 대한 메모'}">${escapeHtml(note)}</textarea>
+        <div class="chip-row" style="justify-content:flex-end;margin-top:10px">
+          ${note ? `<button class="pill" id="note-del">삭제</button>` : ''}
+          <button class="btn-primary" id="note-save" style="width:auto;flex:0 0 auto;padding:12px 22px">저장</button>
         </div>
       </div>`;
     panel.querySelectorAll('.cal-assign').forEach((b) =>
@@ -378,5 +406,12 @@ export function renderCalendar(el, { month, sessionDates, schedule, routineName,
     );
     const clear = panel.querySelector('#cal-clear');
     if (clear) clear.addEventListener('click', () => handlers.onAssign(selectedDay, null));
+
+    const ta = panel.querySelector('#cal-note');
+    panel.querySelector('#note-save').addEventListener('click', () => {
+      handlers.onSaveNote(selectedDay, ta.value);
+    });
+    const del = panel.querySelector('#note-del');
+    if (del) del.addEventListener('click', () => handlers.onSaveNote(selectedDay, ''));
   }
 }
