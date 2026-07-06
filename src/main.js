@@ -1,13 +1,17 @@
 import { createStore } from './store.js';
-import { renderApp, renderRoutines, renderSession, renderHistory, renderCalendar, fmtTime } from './ui.js';
+import { renderApp, renderRoutines, renderSession, renderCardio, renderHistory, renderCalendar, fmtTime } from './ui.js';
 import { createRestTimer } from './timer.js';
-import { lastEntryFor, groupSessionsByDate } from './history.js';
-import { DEFAULT_EXERCISES, REST_SEC } from './presets.js';
+import { lastEntryFor, buildDayHistory } from './history.js';
+import { DEFAULT_EXERCISES, REST_SEC, CARDIO_TYPE } from './presets.js';
 import { dateKey, buildMonth } from './calendar.js';
 
 const store = createStore();
 // 첫 실행: 운동이 하나도 없으면 기본 운동기구를 미리 채움
 if (store.listExercises().length === 0) store.seedExercises(DEFAULT_EXERCISES);
+// 유산소는 나중에 추가된 기능 — 기존 사용자도 유산소 기구가 하나도 없으면 한 번 채움
+if (!store.listExercises().some((e) => e.type === CARDIO_TYPE)) {
+  store.seedExercises(DEFAULT_EXERCISES.filter((e) => e.type === CARDIO_TYPE));
+}
 const root = document.querySelector('#app');
 let tab = 'routines';
 let activeSessionId = null;
@@ -21,6 +25,15 @@ let lastLoggedExercise = null;
 const _now = new Date();
 let calMonth = { year: _now.getFullYear(), month: _now.getMonth() };
 let selectedDay = null;
+
+// 유산소 상태
+let cardioSelectedId = null;      // 고른 기구 id (null = 기구 고르기 화면)
+let cardioMode = 'count';         // 'count'(카운트다운) | 'stop'(스톱워치)
+let cardioTargetSec = 30 * 60;    // 카운트다운 목표(기본 30분)
+let cardioRunning = false;
+let cardioPaused = false;
+let cardioElapsed = 0;            // 경과초
+let cardioInterval = null;
 
 function getActiveRoutine() {
   const sess = activeSessionId ? store.getSession(activeSessionId) : null;
@@ -79,6 +92,52 @@ function beepAndBuzz() {
   if (navigator.vibrate) navigator.vibrate(400);
 }
 
+// ── 유산소 타이머 ──
+function cardioDisplaySec() {
+  return cardioMode === 'count' ? Math.max(0, cardioTargetSec - cardioElapsed) : cardioElapsed;
+}
+function updateCardioView() {
+  const ring = root.querySelector('.timer-ring');
+  const t = ring && ring.querySelector('.t');
+  if (!t) return;
+  t.textContent = fmtTime(cardioDisplaySec());
+  if (cardioMode === 'count') {
+    const pct = cardioTargetSec ? Math.round((cardioDisplaySec() / cardioTargetSec) * 100) : 0;
+    ring.style.background = `radial-gradient(closest-side, var(--bg) 79%, transparent 80%), conic-gradient(var(--accent) ${pct}%, var(--surface-2) 0)`;
+  }
+}
+function cardioTick() {
+  if (cardioPaused) return;
+  cardioElapsed += 1;
+  if (cardioMode === 'count' && cardioElapsed >= cardioTargetSec) { beepAndBuzz(); finishCardio(); return; }
+  updateCardioView();
+}
+function startCardioTimer() {
+  cardioRunning = true;
+  cardioPaused = false;
+  cardioElapsed = 0;
+  clearInterval(cardioInterval);
+  cardioInterval = setInterval(cardioTick, 1000);
+  render();
+}
+function stopCardioTimer() {
+  clearInterval(cardioInterval);
+  cardioInterval = null;
+  cardioRunning = false;
+  cardioPaused = false;
+  cardioElapsed = 0;
+}
+function finishCardio() {
+  // 카운트다운: 목표 도달=목표시간, 조기종료=경과만큼. 스톱워치: 경과.
+  const durationSec = cardioMode === 'count' ? Math.min(cardioElapsed, cardioTargetSec) : cardioElapsed;
+  if (durationSec > 0 && cardioSelectedId) {
+    store.addCardioSession({ exerciseId: cardioSelectedId, durationSec, date: dateKey(new Date()) });
+  }
+  stopCardioTimer();
+  cardioSelectedId = null; // 기구 고르기로 복귀
+  render();
+}
+
 function render() {
   renderApp(root, { tab });
   root.querySelectorAll('[data-tab]').forEach((b) =>
@@ -112,11 +171,40 @@ function render() {
         onFinish() { activeSessionId = null; stopRest(); tab = 'history'; render(); },
       },
     });
+  } else if (tab === 'cardio') {
+    const machines = store.listExercises().filter((e) => e.type === CARDIO_TYPE);
+    const selected = machines.find((m) => m.id === cardioSelectedId) || null;
+    const view = !cardioSelectedId ? 'pick' : cardioRunning ? 'run' : 'setup';
+    const exName = (id) => store.listExercises().find((e) => e.id === id)?.name ?? '(삭제됨)';
+    renderCardio(screen, {
+      machines,
+      view,
+      selectedId: cardioSelectedId,
+      machineName: selected ? selected.name : '',
+      mode: cardioMode,
+      targetSec: cardioTargetSec,
+      displaySec: cardioDisplaySec(),
+      pct: cardioTargetSec ? Math.round((cardioDisplaySec() / cardioTargetSec) * 100) : 0,
+      paused: cardioPaused,
+      recent: store.listCardioSessions().slice(0, 15),
+      exerciseName: exName,
+      handlers: {
+        onPick(id) { cardioSelectedId = id; render(); },
+        onUnpick() { cardioSelectedId = null; render(); },
+        onSetMode(m) { cardioMode = m; render(); },
+        onSetTarget(sec) { cardioTargetSec = Math.max(60, sec); render(); },
+        onAdjustTarget(delta) { cardioTargetSec = Math.max(60, cardioTargetSec + delta); render(); },
+        onStart() { startCardioTimer(); },
+        onPauseResume() { cardioPaused = !cardioPaused; render(); },
+        onFinish() { finishCardio(); },
+        onDeleteRecent(id) { store.removeCardioSession(id); render(); },
+      },
+    });
   } else if (tab === 'history') {
     const exercises = store.listExercises();
     const routines = store.listRoutines();
     renderHistory(screen, {
-      groups: groupSessionsByDate(store.listSessions()),
+      groups: buildDayHistory(store.listSessions(), store.listCardioSessions()),
       routineName: (id) => routines.find((r) => r.id === id)?.name ?? '자유 운동',
       exerciseName: (id) => exercises.find((e) => e.id === id)?.name ?? '(삭제됨)',
       noteFor: (dk) => store.getNote(dk),
@@ -188,7 +276,10 @@ function render() {
     const routines = store.listRoutines();
     renderCalendar(screen, {
       month: buildMonth(calMonth.year, calMonth.month),
-      sessionDates: new Set(store.listSessions().filter((s) => s.logs.length > 0).map((s) => s.date)),
+      sessionDates: new Set([
+        ...store.listSessions().filter((s) => s.logs.length > 0).map((s) => s.date),
+        ...store.listCardioSessions().map((c) => c.date),
+      ]),
       schedule: store.listSchedule(),
       notes: store.listNotes(),
       todayKey: dateKey(new Date()),

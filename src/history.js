@@ -36,3 +36,18 @@ export function groupSessionsByDate(sessions) {
     })
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
+
+// 근력 세션 + 유산소 세션을 날짜별로 합침(유산소만 있는 날도 포함), 최신순.
+// 반환: [{ date, volume, routineIds, logs, cardio: [{ exerciseId, durationSec }] }]
+export function buildDayHistory(sessions, cardioSessions = []) {
+  const byDate = new Map(
+    groupSessionsByDate(sessions).map((g) => [g.date, { ...g, cardio: [] }])
+  );
+  for (const c of cardioSessions) {
+    if (!byDate.has(c.date)) {
+      byDate.set(c.date, { date: c.date, volume: 0, routineIds: [], logs: [], cardio: [] });
+    }
+    byDate.get(c.date).cardio.push({ exerciseId: c.exerciseId, durationSec: c.durationSec });
+  }
+  return [...byDate.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
+}

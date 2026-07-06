@@ -1,6 +1,9 @@
+import { CARDIO_TYPE } from './presets.js';
+
 const TABS = [
   { id: 'routines', label: '루틴' },
   { id: 'session', label: '운동' },
+  { id: 'cardio', label: '유산소' },
   { id: 'history', label: '기록' },
   { id: 'calendar', label: '달력' },
 ];
@@ -101,6 +104,98 @@ export function renderSession(el, { session, routine, exercises, lastEntries, ti
   el.querySelector('#finish').addEventListener('click', () => handlers.onFinish());
 }
 
+// 유산소 탭. view: 'pick'(기구 고르기) | 'setup'(모드·시간 설정) | 'run'(타이머).
+const CARDIO_PRESET_MIN = [10, 15, 20, 30, 40, 45, 60];
+export function renderCardio(el, {
+  machines, view, selectedId, machineName, mode, targetSec,
+  displaySec, pct, paused, recent, exerciseName, handlers,
+}) {
+  if (machines.length === 0) {
+    el.innerHTML = `<h1>유산소</h1><p class="dim">유산소 기구가 없음. 루틴 탭에서 "기본 운동 불러오기"를 누르면 추가돼.</p>`;
+    return;
+  }
+  let body = '';
+  if (view === 'pick') {
+    body = `
+      <div class="label" style="margin-bottom:10px">기구 고르기</div>
+      <div class="cardio-grid">
+        ${machines.map((m) => `<button class="cardio-pick${m.id === selectedId ? ' on' : ''}" data-mid="${m.id}">${escapeHtml(m.name)}</button>`).join('')}
+      </div>`;
+  } else if (view === 'setup') {
+    body = `
+      <div class="card">
+        <div class="label">${escapeHtml(machineName)}</div>
+        <div class="seg" style="margin:12px 0 4px">
+          <button class="seg-btn${mode === 'count' ? ' on' : ''}" data-mode="count">카운트다운</button>
+          <button class="seg-btn${mode === 'stop' ? ' on' : ''}" data-mode="stop">스톱워치</button>
+        </div>
+        ${mode === 'count' ? `
+          <div class="cardio-time num">${fmtTime(targetSec)}</div>
+          <div class="chip-row" style="justify-content:center;margin:8px 0 6px">
+            ${CARDIO_PRESET_MIN.map((mn) => `<button class="pill${targetSec === mn * 60 ? ' on' : ''}" data-min="${mn}">${mn}분</button>`).join('')}
+          </div>
+          <div class="chip-row" style="justify-content:center;margin-bottom:14px">
+            <button class="pill" data-adj="-60">−1분</button>
+            <button class="pill" data-adj="60">+1분</button>
+          </div>` : `<p class="dim" style="text-align:center;margin:16px 0">시작하면 0부터 시간이 올라가.</p>`}
+        <div class="chip-row" style="gap:8px">
+          <button class="btn-primary" id="cardio-back" style="flex:1;background:var(--surface-2);color:var(--text)">← 기구</button>
+          <button class="btn-primary" id="cardio-start" style="flex:2">시작</button>
+        </div>
+      </div>`;
+  } else {
+    const ring = mode === 'count'
+      ? `background: radial-gradient(closest-side, var(--bg) 79%, transparent 80%), conic-gradient(var(--accent) ${pct}%, var(--surface-2) 0);`
+      : '';
+    body = `
+      <div class="card" style="text-align:center">
+        <div class="label">${escapeHtml(machineName)} · ${mode === 'count' ? '남은 시간' : '경과 시간'}</div>
+        <div class="timer-ring" style="${ring};margin:18px auto"><div class="t">${fmtTime(displaySec)}</div></div>
+        <div class="chip-row" style="gap:8px;margin-top:6px">
+          <button class="btn-primary" id="cardio-pause" style="flex:1;background:var(--surface-2);color:var(--text)">${paused ? '재개' : '일시정지'}</button>
+          <button class="btn-primary" id="cardio-finish" style="flex:2">종료 &amp; 기록</button>
+        </div>
+      </div>`;
+  }
+  const recentHtml = recent.length ? `
+    <div class="label" style="margin:22px 0 8px">최근 유산소</div>
+    ${recent.map((c) => `
+      <div class="card cardio-log">
+        <div style="flex:1">
+          <div style="font-weight:800">${escapeHtml(exerciseName(c.exerciseId))}</div>
+          <div class="hist-meta">${c.date} · ${fmtTime(c.durationSec)}</div>
+        </div>
+        <button class="ord-btn cardio-del" data-cid="${c.id}">✕</button>
+      </div>`).join('')}` : '';
+  el.innerHTML = `<h1>유산소</h1>${body}${recentHtml}`;
+
+  if (view === 'pick') {
+    el.querySelectorAll('.cardio-pick').forEach((b) =>
+      b.addEventListener('click', () => handlers.onPick(b.dataset.mid))
+    );
+  } else if (view === 'setup') {
+    el.querySelectorAll('.seg-btn').forEach((b) =>
+      b.addEventListener('click', () => handlers.onSetMode(b.dataset.mode))
+    );
+    el.querySelectorAll('[data-min]').forEach((b) =>
+      b.addEventListener('click', () => handlers.onSetTarget(Number(b.dataset.min) * 60))
+    );
+    el.querySelectorAll('[data-adj]').forEach((b) =>
+      b.addEventListener('click', () => handlers.onAdjustTarget(Number(b.dataset.adj)))
+    );
+    el.querySelector('#cardio-back').addEventListener('click', () => handlers.onUnpick());
+    el.querySelector('#cardio-start').addEventListener('click', () => handlers.onStart());
+  } else {
+    el.querySelector('#cardio-pause').addEventListener('click', () => handlers.onPauseResume());
+    el.querySelector('#cardio-finish').addEventListener('click', () => handlers.onFinish());
+  }
+  el.querySelectorAll('.cardio-del').forEach((b) =>
+    b.addEventListener('click', () => {
+      if (window.confirm('이 유산소 기록을 지울까?')) handlers.onDeleteRecent(b.dataset.cid);
+    })
+  );
+}
+
 // groups = groupSessionsByDate 결과: [{ date, volume, routineIds, logs }]
 // 카드 탭하면 그날 내용 펼침/접힘(기본 접힘).
 // noteFor = (dateKey) => 그날 총평 문자열|없으면 falsy
@@ -132,20 +227,34 @@ export function renderHistory(el, { groups, routineName, exerciseName, noteFor =
           </div>`;
         })
         .join('');
+      const cardio = day.cardio || [];
+      const cardioRows = cardio
+        .map(
+          (c) => `<div class="hist-ex">
+            <div class="hist-ex-name">${exerciseName(c.exerciseId)}</div>
+            <div class="hist-ex-sets"><span class="set-chip cardio">🏃 ${fmtTime(c.durationSec)}</span></div>
+          </div>`
+        )
+        .join('');
       const exCount = day.logs.length;
       const totalSets = day.logs.reduce((n, l) => n + l.sets.length, 0);
+      const meta = [
+        exCount ? `운동 ${exCount} · 세트 ${totalSets} · 볼륨 ${day.volume.toLocaleString()}kg` : '',
+        cardio.length ? `유산소 ${cardio.length}` : '',
+      ].filter(Boolean).join(' · ');
       return `
       <div class="card hist-card" data-hist="${i}">
         <div class="hist-head">
           <div style="flex:1">
             <div class="hist-date">${fmtDayLabel(day.date)}</div>
             ${names ? `<div class="hist-routine">${names}</div>` : ''}
-            <div class="hist-meta">운동 ${exCount} · 세트 ${totalSets} · 볼륨 ${day.volume.toLocaleString()}kg</div>
+            <div class="hist-meta">${meta}</div>
           </div>
           <span class="hist-caret">▾</span>
         </div>
         <div class="hist-detail">
           ${rows}
+          ${cardioRows}
           ${note ? `<div class="hist-note"><span class="label">총평</span>${escapeHtml(note)}</div>` : ''}
         </div>
       </div>`;
@@ -244,19 +353,20 @@ export function renderRoutines(el, { routines, exercises, creatingRoutine, editi
 }
 
 function renderRoutineForm(el, { exercises, editing, handlers }) {
+  const pickable = exercises.filter((e) => e.type !== CARDIO_TYPE); // 유산소는 루틴 대상 아님
   const byId = new Map(exercises.map((e) => [e.id, e]));
   const initialIds = editing
     ? editing.items.map((it) => it.exerciseId).filter((id) => byId.has(id))
     : [];
   el.innerHTML = `
     <h1>${editing ? '루틴 수정' : '새 루틴'}</h1>
-    <input id="r-name" type="text" placeholder="루틴 이름 (예: 가슴날)" value="${editing ? editing.name : ''}"
-      style="width:100%;padding:12px;font-size:16px;border-radius:10px;border:1px solid var(--surface-2);background:var(--surface);color:var(--text);box-sizing:border-box">
-    <div class="label" style="margin:16px 0 6px">운동 순서 (실제 하는 순서대로 ▲▼로 정렬)</div>
+    <input id="r-name" type="text" placeholder="루틴 이름 (예: 가슴날)" value="${editing ? escapeHtml(editing.name) : ''}">
+    <div class="label" style="margin:18px 0 6px">운동 순서 <span class="dim" style="font-weight:600;text-transform:none;letter-spacing:0">· 하는 순서대로 ▲▼</span></div>
     <div id="ex-order"></div>
-    <div class="label" style="margin:16px 0 6px">운동 고르기</div>
+    <div class="label" style="margin:18px 0 8px">운동 고르기 <span class="dim" style="font-weight:600;text-transform:none;letter-spacing:0">· 부위 눌러 펼치기</span></div>
+    <input id="ex-search" type="text" placeholder="🔍 운동 이름 검색" autocomplete="off" style="margin-bottom:10px">
     <div id="ex-pick"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
+    <div class="form-actions">
       <button class="btn-primary" id="cancel-routine" style="flex:1;background:var(--surface-2);color:var(--text)">취소</button>
       <button class="btn-primary" id="create-routine" style="flex:2">${editing ? '저장' : '만들기'}</button>
     </div>
@@ -266,7 +376,7 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
   const orderWrap = el.querySelector('#ex-order');
   const orderRow = (id) =>
     `<div class="setrow" data-ord="${id}" style="display:flex;align-items:center;gap:8px">
-      <span style="flex:1">${byId.get(id)?.name ?? '(삭제됨)'}</span>
+      <span style="flex:1">${escapeHtml(byId.get(id)?.name ?? '(삭제됨)')}</span>
       <button class="ord-btn ord-up">▲</button>
       <button class="ord-btn ord-down">▼</button>
       <button class="ord-btn ord-del">✕</button>
@@ -301,37 +411,77 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
     if (row) row.remove();
     const cb = el.querySelector(`.ex-check[value="${id}"]`);
     if (cb) cb.checked = false;
+    updateCountFor(id);
     renderEmptyIfNeeded();
   }
   orderWrap.innerHTML = initialIds.map(orderRow).join('');
   wireOrder();
   renderEmptyIfNeeded();
 
-  // ── 부위별 체크박스: 체크하면 순서 리스트 끝에 추가, 해제하면 제외 ──
+  // ── 부위 아코디언(기본 접힘, 선택 있으면 펼침) + 검색 ──
   const checkedIds = new Set(initialIds);
   const pick = el.querySelector('#ex-pick');
-  if (exercises.length === 0) {
+  function updateCountFor(id) {
+    const acc = pick.querySelector(`.ex-check[value="${id}"]`)?.closest('.acc');
+    if (acc) refreshCount(acc);
+  }
+  function refreshCount(acc) {
+    const total = acc.querySelectorAll('.ex-check').length;
+    const sel = acc.querySelectorAll('.ex-check:checked').length;
+    acc.querySelector('.acc-count').innerHTML = sel ? `<b>${sel}</b>/${total}` : `${total}`;
+  }
+  if (pickable.length === 0) {
     pick.innerHTML = `<p class="dim">등록된 운동이 없음. 먼저 "기본 운동 불러오기"를 눌러줘.</p>`;
   } else {
-    pick.innerHTML = groupByPart(exercises)
-      .map(
-        ([part, list]) => `
-      <div class="label" style="margin:10px 0 4px">${part}</div>
-      ${list
-        .map(
-          (ex) => `
-        <label class="setrow" style="display:flex;align-items:center;gap:10px;cursor:pointer">
-          <input type="checkbox" class="ex-check" value="${ex.id}" ${checkedIds.has(ex.id) ? 'checked' : ''} style="width:20px;height:20px;flex:0 0 auto">
-          <span>${ex.name}</span>
-        </label>`
-        )
-        .join('')}`
-      )
+    pick.innerHTML = groupByPart(pickable)
+      .map(([part, list]) => {
+        const sel = list.filter((e) => checkedIds.has(e.id)).length;
+        return `
+      <div class="acc${sel ? ' open' : ''}" data-part="${escapeHtml(part)}">
+        <button type="button" class="acc-head">
+          <span class="acc-title">${escapeHtml(part)}</span>
+          <span class="acc-count">${sel ? `<b>${sel}</b>/${list.length}` : list.length}</span>
+          <span class="acc-caret">▾</span>
+        </button>
+        <div class="acc-body">
+          ${list
+            .map(
+              (ex) => `
+            <label class="pick-row" data-name="${escapeHtml(ex.name)}">
+              <input type="checkbox" class="ex-check" value="${ex.id}" ${checkedIds.has(ex.id) ? 'checked' : ''}>
+              <span>${escapeHtml(ex.name)}</span>
+            </label>`
+            )
+            .join('')}
+        </div>
+      </div>`;
+      })
       .join('');
+
+    pick.querySelectorAll('.acc-head').forEach((h) =>
+      h.addEventListener('click', () => h.closest('.acc').classList.toggle('open'))
+    );
     pick.querySelectorAll('.ex-check').forEach((cb) => {
       cb.addEventListener('change', () => {
-        if (cb.checked) addToOrder(cb.value);
-        else removeFromOrder(cb.value);
+        if (cb.checked) { checkedIds.add(cb.value); addToOrder(cb.value); }
+        else { checkedIds.delete(cb.value); removeFromOrder(cb.value); }
+        refreshCount(cb.closest('.acc'));
+      });
+    });
+
+    const search = el.querySelector('#ex-search');
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      pick.querySelectorAll('.acc').forEach((acc) => {
+        let visible = 0;
+        acc.querySelectorAll('.pick-row').forEach((row) => {
+          const match = !q || row.dataset.name.toLowerCase().includes(q);
+          row.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        acc.style.display = visible ? '' : 'none';
+        if (q) acc.classList.add('open');
+        else acc.classList.toggle('open', acc.querySelector('.ex-check:checked') != null);
       });
     });
   }

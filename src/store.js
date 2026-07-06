@@ -2,7 +2,7 @@ import { createStorage } from './storage.js';
 
 export const STORAGE_KEY = 'workout-logger/state/v1';
 
-const emptyState = () => ({ exercises: [], routines: [], sessions: [], schedule: {}, notes: {} });
+const emptyState = () => ({ exercises: [], routines: [], sessions: [], schedule: {}, notes: {}, cardioSessions: [] });
 
 // 백업 파일(또는 raw state)을 안전한 state 모양으로 정규화. 이상한 값은 버림.
 function normalizeState(payload) {
@@ -17,6 +17,7 @@ function normalizeState(payload) {
     sessions: arr(raw.sessions),
     schedule: obj(raw.schedule),
     notes: obj(raw.notes),
+    cardioSessions: arr(raw.cardioSessions),
   };
 }
 // id 기준 합집합 — 기존이 우선(같은 id면 안 덮음)
@@ -151,6 +152,22 @@ export function createStore({
     getSession: (id) => state.sessions.find((x) => x.id === id) ?? null,
     listSessions: () => [...state.sessions].reverse(),
 
+    // ── 유산소: 시간만 기록(무게/세트 없음) ──
+    addCardioSession({ exerciseId, durationSec, date }) {
+      const c = { id: genId(), exerciseId, durationSec, date };
+      state.cardioSessions.push(c);
+      persist();
+      return c;
+    },
+    listCardioSessions: () => [...state.cardioSessions].reverse(),
+    removeCardioSession(id) {
+      const i = state.cardioSessions.findIndex((x) => x.id === id);
+      if (i === -1) return false;
+      state.cardioSessions.splice(i, 1);
+      persist();
+      return true;
+    },
+
     // ── 백업/복원 ──
     // 전체 데이터를 파일로 내보낼 스냅샷. app/버전 표식 포함.
     exportData() {
@@ -170,10 +187,12 @@ export function createStore({
         state.sessions = inc.sessions;
         state.schedule = inc.schedule;
         state.notes = inc.notes;
+        state.cardioSessions = inc.cardioSessions;
       } else {
         state.exercises = mergeById(state.exercises, inc.exercises);
         state.routines = mergeById(state.routines, inc.routines);
         state.sessions = mergeById(state.sessions, inc.sessions);
+        state.cardioSessions = mergeById(state.cardioSessions, inc.cardioSessions);
         state.schedule = { ...inc.schedule, ...state.schedule }; // 기존 우선
         state.notes = { ...inc.notes, ...state.notes };
       }
