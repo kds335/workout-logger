@@ -7,6 +7,13 @@ const sessions = [
   { id: 's2', date: '2026-06-20', logs: [{ exerciseId: 'ex1', sets: [{ weight: 50, reps: 10 }, { weight: 50, reps: 8 }] }] },
 ];
 
+test('같은 날짜에는 최신순 입력의 첫 세션을 지난 기록으로 유지한다', () => {
+  const entries = [80, 40].map((weight, index) => ({
+    id: `same-day-${index}`, date: '2026-09-30', logs: [{ exerciseId: 'ex1', sets: [{ weight, reps: 10 }] }],
+  }));
+  assert.equal(lastEntryFor(entries, 'ex1').sets[0].weight, 80);
+});
+
 test('lastEntryFor는 가장 최근 날짜의 세트', () => {
   const e = lastEntryFor(sessions, 'ex1');
   assert.equal(e.date, '2026-06-20');

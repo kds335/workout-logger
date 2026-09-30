@@ -80,3 +80,94 @@ test('updateLastSetRest 대상 없으면 조용히 무시', () => {
   const sess = s.startSession({ routineId: 'r1', date: '2026-06-22' });
   assert.doesNotThrow(() => s.updateLastSetRest(sess.id, 'nope', 60));
 });
+
+test('0kg 맨몸 기록 허용, 잘못된 무게/횟수/휴식은 상태 변경 없이 거절', () => {
+  const s = makeStore();
+  const sess = s.startSession({ date: '2026-09-30' });
+  s.logSet(sess.id, 'ex1', { weight: 0, reps: 12, restSec: 0 });
+  const before = s.exportData();
+  const invalid = [
+    { weight: -1, reps: 10 }, { weight: NaN, reps: 10 }, { weight: Infinity, reps: 10 },
+    { weight: '20', reps: 10 }, { weight: 20, reps: 0 }, { weight: 20, reps: -1 },
+    { weight: 20, reps: 1.5 }, { weight: 20, reps: Infinity }, { weight: 20, reps: '10' },
+    { weight: 20, reps: 10, restSec: -1 },
+  ];
+  for (const set of invalid) {
+    assert.throws(() => s.logSet(sess.id, 'ex2', set));
+    assert.deepEqual(s.exportData(), before);
+  }
+});
+
+test('updateSet은 선택한 세트만 수정하고 휴식 기록을 유지하며 저장됨', () => {
+  const backend = fakeBackend();
+  const s = createStore({ storage: createStorage(backend), genId: seqId() });
+  const sess = s.startSession({ date: '2026-09-30' });
+  s.logSet(sess.id, 'ex1', { weight: 50, reps: 12, restSec: 90 });
+  s.logSet(sess.id, 'ex1', { weight: 50, reps: 10, restSec: 120 });
+  assert.deepEqual(s.updateSet(sess.id, 'ex1', 0, { weight: 0, reps: 15 }), { weight: 0, reps: 15, restSec: 90 });
+  const restored = createStore({ storage: createStorage(backend) }).getSession(sess.id);
+  assert.deepEqual(restored.logs[0].sets, [
+    { weight: 0, reps: 15, restSec: 90 }, { weight: 50, reps: 10, restSec: 120 },
+  ]);
+  assert.throws(() => s.updateSet(sess.id, 'ex1', 0, { weight: 0, reps: 0 }));
+  assert.deepEqual(s.getSession(sess.id), restored);
+});
+
+test('세트 수정/삭제의 없는 대상과 잘못된 인덱스는 기록을 건드리지 않음', () => {
+  const s = makeStore();
+  const sess = s.startSession({ date: '2026-09-30' });
+  s.logSet(sess.id, 'ex1', { weight: 20, reps: 10 });
+  const before = s.exportData();
+  for (const index of [-1, 1, 0.5, '0', NaN]) {
+    assert.equal(s.updateSet(sess.id, 'ex1', index, { weight: 30, reps: 10 }), null);
+    assert.equal(s.removeSet(sess.id, 'ex1', index), false);
+  }
+  assert.equal(s.updateSet('missing', 'ex1', 0, { weight: 30, reps: 10 }), null);
+  assert.equal(s.removeSet(sess.id, 'missing', 0), false);
+  assert.deepEqual(s.exportData(), before);
+});
+
+test('removeSet은 선택한 세트를 삭제하고 마지막 세트 삭제 시 빈 운동 로그를 정리', () => {
+  const s = makeStore();
+  const sess = s.startSession({ date: '2026-09-30' });
+  s.logSet(sess.id, 'ex1', { weight: 20, reps: 10 });
+  s.logSet(sess.id, 'ex1', { weight: 25, reps: 8 });
+  s.logSet(sess.id, 'ex2', { weight: 0, reps: 12 });
+  assert.equal(s.removeSet(sess.id, 'ex1', 0), true);
+  assert.deepEqual(s.getSession(sess.id).logs[0].sets, [{ weight: 25, reps: 8 }]);
+  assert.equal(s.removeSet(sess.id, 'ex1', 0), true);
+  assert.equal(s.getSession(sess.id).logs.length, 1);
+  assert.equal(s.getSession(sess.id).logs[0].exerciseId, 'ex2');
+});
+
+test('removeSession은 선택한 세션만 삭제', () => {
+  const s = makeStore();
+  const empty = s.startSession({ date: '2026-09-30' });
+  const recorded = s.startSession({ date: '2026-09-30' });
+  s.logSet(recorded.id, 'ex1', { weight: 20, reps: 10 });
+  assert.equal(s.removeSession(empty.id), true);
+  assert.equal(s.removeSession(empty.id), false);
+  assert.equal(s.getSession(empty.id), null);
+  assert.equal(s.getSession(recorded.id).logs[0].sets.length, 1);
+});
+
+test('세트 추가/수정/삭제 저장 실패 시 보이는 기록도 원래대로 유지', () => {
+  const backend = fakeBackend();
+  const s = createStore({ storage: createStorage(backend), genId: seqId() });
+  const sess = s.startSession({ date: '2026-09-30' });
+  s.logSet(sess.id, 'ex1', { weight: 20, reps: 10, restSec: 60 });
+  const before = s.exportData();
+  backend.setItem = () => { throw new Error('QuotaExceededError'); };
+  const actions = [
+    () => s.logSet(sess.id, 'ex1', { weight: 30, reps: 8 }),
+    () => s.updateSet(sess.id, 'ex1', 0, { weight: 30, reps: 8 }),
+    () => s.removeSet(sess.id, 'ex1', 0),
+    () => s.updateLastSetRest(sess.id, 'ex1', 90),
+    () => s.removeSession(sess.id),
+  ];
+  for (const action of actions) {
+    assert.throws(action, /QuotaExceededError/);
+    assert.deepEqual(s.exportData(), before);
+    assert.equal(s.getSession(sess.id), sess);
+  }
+});

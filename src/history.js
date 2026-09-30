@@ -1,7 +1,7 @@
 export function lastEntryFor(sessions, exerciseId) {
   const matches = sessions
     .filter((s) => s.logs.some((l) => l.exerciseId === exerciseId))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
+    .sort((a, b) => b.date.localeCompare(a.date));
   if (matches.length === 0) return null;
   const recent = matches[0];
   const log = recent.logs.find((l) => l.exerciseId === exerciseId);

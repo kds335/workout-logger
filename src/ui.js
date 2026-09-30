@@ -8,12 +8,12 @@ const TABS = [
   { id: 'calendar', label: '달력' },
 ];
 
-export function renderApp(root, { tab }) {
+export function renderApp(root, { tab, activeSession = false, cardioRunning = false }) {
   root.innerHTML = `
     <main class="screen" id="screen"></main>
-    <nav class="tabbar">
+    <nav class="tabbar" aria-label="주 메뉴">
       ${TABS.map(
-        (t) => `<button data-tab="${t.id}" class="${t.id === tab ? 'active' : ''}">${t.label}</button>`
+        (t) => `<button data-tab="${t.id}" class="${t.id === tab ? 'active' : ''}" ${t.id === tab ? 'aria-current="page"' : ''}>${t.label}${(t.id === 'session' && activeSession) || (t.id === 'cardio' && cardioRunning) ? '<span class="tab-status">진행 중</span>' : ''}</button>`
       ).join('')}
     </nav>
   `;
@@ -28,6 +28,8 @@ export function escapeHtml(s) {
 }
 
 export function fmtTime(sec) {
+  sec = Number(sec);
+  sec = Number.isFinite(sec) ? Math.max(0, Math.floor(sec)) : 0;
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
@@ -35,30 +37,38 @@ export function fmtTime(sec) {
 
 export function renderSession(el, { session, routine, exercises, lastEntries, timer, restSec, handlers }) {
   if (!session) {
-    el.innerHTML = `<h1>운동</h1><p class="dim">루틴 탭에서 "시작"을 눌러 운동을 시작해.</p>`;
+    el.innerHTML = `<h1>운동</h1><div class="card empty-state"><h2>어떤 운동을 할까요?</h2><p class="dim">루틴 탭에서 운동할 루틴의 ‘운동 시작’을 눌러주세요.</p></div>`;
     return;
   }
   const nameOf = (id) => exercises.find((e) => e.id === id)?.name ?? '(삭제됨)';
-  const ringStyle = timer
-    ? `background: radial-gradient(closest-side, var(--bg) 79%, transparent 80%), conic-gradient(var(--accent) ${
-        timer.pct
-      }%, var(--surface-2) 0);`
-    : '';
+  const items = [...(routine?.items ?? [])];
+  for (const log of session.logs) {
+    if (!items.some((it) => it.exerciseId === log.exerciseId)) items.push({ exerciseId: log.exerciseId });
+  }
+  const totalSets = session.logs.reduce((total, log) => total + log.sets.length, 0);
+  const totalTarget = items.reduce((total, it) => total + (Number(it.targetSets) || 0), 0);
 
   el.innerHTML = `
-    <h1>운동 중</h1>
+    <div class="session-heading">
+      <div class="label">진행 중 · ${escapeHtml(session.date)}</div>
+      <h1>${escapeHtml(routine?.name || '자유 운동')}</h1>
+      <p class="session-summary">${items.length}개 운동 · <strong>${totalSets}${totalTarget ? ` / ${totalTarget}` : ''}세트 완료</strong></p>
+    </div>
+    <p class="background-hint">화면을 꺼도 경과 시간은 반영돼요. 알림음은 기기에 따라 제한될 수 있어요.</p>
     ${timer ? `
-      <div class="rest-bar">
-        <div class="timer-ring" style="${ringStyle}"><div class="t">${fmtTime(timer.remaining)}</div></div>
-        <p class="dim" style="text-align:center;margin-top:-4px">휴식 중</p>
-        <div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
-          <button class="btn-primary" id="rest-minus" style="flex:1;background:var(--surface-2);color:var(--text)">−15초</button>
-          <button class="btn-primary" id="rest-skip" style="flex:1;background:var(--surface-2);color:var(--text)">건너뛰기</button>
-          <button class="btn-primary" id="rest-plus" style="flex:1;background:var(--surface-2);color:var(--text)">+15초</button>
+      <div class="rest-bar" data-timer="rest" aria-label="세트 사이 휴식">
+        <div class="rest-heading"><span>휴식 중</span><span class="t" role="timer" aria-label="남은 휴식 시간">${fmtTime(timer.remaining)}</span></div>
+        <div class="rest-progress" style="--progress:${timer.pct}%" aria-hidden="true"></div>
+        <div class="rest-actions">
+          <button class="btn-secondary" id="rest-minus" aria-label="휴식 15초 줄이기">−15초</button>
+          <button class="btn-secondary" id="rest-plus" aria-label="휴식 15초 늘리기">+15초</button>
+          <button class="btn-secondary" id="rest-skip">휴식 끝내기</button>
         </div>
       </div>` : ''}
+    <div class="rest-preference"><label for="rest-duration">세트 완료 후 휴식</label><select id="rest-duration">${[60, 90, 120, 180].map((sec) => `<option value="${sec}" ${sec === restSec ? 'selected' : ''}>${sec < 60 ? `${sec}초` : `${Math.floor(sec / 60)}분${sec % 60 ? ` ${sec % 60}초` : ''}`}</option>`).join('')}</select></div>
     <div id="exercises"></div>
-    <button class="btn-primary" id="finish" style="margin-top:16px;background:var(--surface-2);color:var(--text)">운동 종료</button>
+    <p class="save-hint">완료한 세트는 이 기기에 자동 저장돼요.</p>
+    <button class="btn-primary btn-secondary" id="finish">운동 마치기 · ${totalSets}세트</button>
   `;
 
   if (timer) {
@@ -66,42 +76,97 @@ export function renderSession(el, { session, routine, exercises, lastEntries, ti
     el.querySelector('#rest-plus').addEventListener('click', () => handlers.onAdjustRest(15));
     el.querySelector('#rest-skip').addEventListener('click', () => handlers.onSkipRest());
   }
+  el.querySelector('#rest-duration').addEventListener('change', (event) => handlers.onSetRestSec(Number(event.target.value)));
 
   const wrap = el.querySelector('#exercises');
-  const items = routine ? routine.items : session.logs.map((l) => ({ exerciseId: l.exerciseId }));
   wrap.innerHTML = items
-    .map((it) => {
+    .map((it, itemIndex) => {
       const log = session.logs.find((l) => l.exerciseId === it.exerciseId);
       const sets = log ? log.sets : [];
-      const last = lastEntries[it.exerciseId];
+      const last = lastEntries?.[it.exerciseId];
+      const previous = sets.at(-1) || last?.sets[0];
       const lastHint = last
-        ? `저번(${last.date}): ${last.sets.map((s) => `${s.weight}kg×${s.reps}`).join(', ')}`
-        : '저번 기록 없음';
+        ? `지난 기록 (${last.date}) · ${last.sets.map((s) => `${s.weight}kg × ${s.reps}회`).join(' / ')}`
+        : '첫 기록이에요. 맨몸 운동은 0kg으로 입력하세요.';
       return `
-      <div class="card" data-ex="${it.exerciseId}">
-        <div style="font-size:18px;font-weight:800;margin-bottom:6px">${nameOf(it.exerciseId)} <span class="dim" style="font-size:13px;font-weight:400">휴식 ${restSec}초</span></div>
-        <div class="last-hint">${lastHint}</div>
-        ${sets.map((s, i) => `<div class="setrow done"><span class="n">${i + 1}</span> <span class="setval">${s.weight}<small>kg</small> × ${s.reps}<small>회</small></span> <span class="kg">✓</span></div>`).join('')}
-        <div class="set-input">
-          <input type="number" inputmode="decimal" placeholder="kg" class="in-weight">
-          <input type="number" inputmode="numeric" placeholder="회" class="in-reps">
-        </div>
-        <button class="btn-primary log-set">세트 완료</button>
-      </div>`;
+      <section class="card exercise-card" data-ex="${escapeHtml(it.exerciseId)}" aria-labelledby="exercise-${itemIndex}">
+        <div class="exercise-heading"><h2 id="exercise-${itemIndex}">${escapeHtml(nameOf(it.exerciseId))}</h2><span class="exercise-progress${it.targetSets && sets.length >= it.targetSets ? ' complete' : ''}">${sets.length}${it.targetSets ? ` / ${escapeHtml(it.targetSets)}` : ''}세트</span></div>
+        <div class="last-hint">${escapeHtml(lastHint)}</div>
+        <div class="completed-sets">${sets.map((s, i) => `<div class="completed-set" data-set-index="${i}"><div class="setrow done"><span class="n" aria-label="${i + 1}세트">${i + 1}</span><span class="setval">${escapeHtml(s.weight)}<small>kg</small> × ${escapeHtml(s.reps)}<small>회</small></span><button type="button" class="set-edit" aria-expanded="false" aria-label="${escapeHtml(nameOf(it.exerciseId))} ${i + 1}세트 수정">수정</button><button type="button" class="set-remove" aria-label="${escapeHtml(nameOf(it.exerciseId))} ${i + 1}세트 삭제">삭제</button></div></div>`).join('')}</div>
+        <form class="set-entry" novalidate>
+          <div class="set-input">
+            <label>무게 <span class="dim">kg</span><input type="number" min="0" step="any" inputmode="decimal" enterkeyhint="next" placeholder="0" class="in-weight" aria-label="${escapeHtml(nameOf(it.exerciseId))} 무게 kg" value="${previous ? escapeHtml(previous.weight) : ''}"></label>
+            <label>반복 <span class="dim">회</span><input type="number" min="1" step="1" inputmode="numeric" enterkeyhint="done" placeholder="횟수" class="in-reps" aria-label="${escapeHtml(nameOf(it.exerciseId))} 반복 횟수" value="${previous ? escapeHtml(previous.reps) : ''}"></label>
+          </div>
+          <p class="input-error" role="alert" hidden></p>
+          ${previous ? `<p class="input-hint">${sets.length ? '직전 세트' : '지난 첫 세트'}를 채웠어요. 무게·횟수를 바꿔 기록하세요.</p>` : ''}
+          <button type="submit" class="btn-primary log-set">${sets.length + 1}세트 완료</button>
+        </form>
+      </section>`;
     })
     .join('');
 
   wrap.querySelectorAll('[data-ex]').forEach((card) => {
     const exId = card.dataset.ex;
-    card.querySelector('.log-set').addEventListener('click', () => {
-      const weight = Number(card.querySelector('.in-weight').value);
-      const reps = Number(card.querySelector('.in-reps').value);
-      if (!weight || !reps) return;
-      handlers.onLogSet(exId, { weight, reps });
-      handlers.onStartRest();
+    const form = card.querySelector('.set-entry');
+    clearSetErrorOnInput(form);
+    form.querySelector('.in-weight').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); form.querySelector('.in-reps').focus(); }
+    });
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const set = readSetInputs(form, '.in-weight', '.in-reps');
+      if (set) handlers.onLogSet(exId, set);
+    });
+    card.querySelectorAll('[data-set-index]').forEach((row) => {
+      const index = Number(row.dataset.setIndex);
+      const set = session.logs.find((log) => log.exerciseId === exId).sets[index];
+      row.querySelector('.set-remove').addEventListener('click', () => {
+        if (window.confirm(`${nameOf(exId)} ${index + 1}세트 (${set.weight}kg × ${set.reps}회)를 삭제할까요?`)) handlers.onRemoveSet(exId, index);
+      });
+      row.querySelector('.set-edit').addEventListener('click', (event) => {
+        const existing = row.querySelector('.set-editor');
+        if (existing) { existing.remove(); event.currentTarget.setAttribute('aria-expanded', 'false'); return; }
+        event.currentTarget.setAttribute('aria-expanded', 'true');
+        row.insertAdjacentHTML('beforeend', `<form class="set-editor" novalidate><div class="set-input"><label>무게 kg<input class="edit-weight" type="number" inputmode="decimal" min="0" step="any" value="${escapeHtml(set.weight)}"></label><label>반복 회<input class="edit-reps" type="number" inputmode="numeric" min="1" step="1" value="${escapeHtml(set.reps)}"></label></div><p class="input-error" role="alert" hidden></p><div class="set-editor-actions"><button type="button" class="btn-secondary edit-cancel">취소</button><button type="submit" class="btn-primary">수정 저장</button></div></form>`);
+        const editor = row.querySelector('.set-editor');
+        clearSetErrorOnInput(editor);
+        editor.querySelector('.edit-weight').focus();
+        editor.querySelector('.edit-cancel').addEventListener('click', () => { editor.remove(); row.querySelector('.set-edit').setAttribute('aria-expanded', 'false'); row.querySelector('.set-edit').focus(); });
+        editor.addEventListener('submit', (editEvent) => {
+          editEvent.preventDefault();
+          const changed = readSetInputs(editor, '.edit-weight', '.edit-reps');
+          if (changed) handlers.onUpdateSet(exId, index, { ...set, ...changed });
+        });
+      });
     });
   });
   el.querySelector('#finish').addEventListener('click', () => handlers.onFinish());
+}
+
+function clearSetErrorOnInput(form) {
+  form.addEventListener('input', () => {
+    form.querySelectorAll('[aria-invalid]').forEach((input) => input.removeAttribute('aria-invalid'));
+    const error = form.querySelector('.input-error');
+    error.hidden = true;
+    error.textContent = '';
+  });
+}
+
+function readSetInputs(form, weightSelector, repsSelector) {
+  const weightInput = form.querySelector(weightSelector);
+  const repsInput = form.querySelector(repsSelector);
+  const weight = Number(weightInput.value);
+  const reps = Number(repsInput.value);
+  const weightValid = weightInput.value.trim() !== '' && Number.isFinite(weight) && weight >= 0;
+  const repsValid = repsInput.value.trim() !== '' && Number.isInteger(reps) && reps > 0;
+  weightInput.setAttribute('aria-invalid', String(!weightValid));
+  repsInput.setAttribute('aria-invalid', String(!repsValid));
+  const error = form.querySelector('.input-error');
+  error.hidden = weightValid && repsValid;
+  error.textContent = !weightValid ? '무게는 0 이상의 숫자로 입력하세요. 맨몸 운동은 0kg이에요.' : !repsValid ? '반복 횟수는 1 이상의 정수로 입력하세요.' : '';
+  if (!weightValid || !repsValid) { (!weightValid ? weightInput : repsInput).focus(); return null; }
+  return { weight, reps };
 }
 
 // 유산소 탭. view: 'pick'(기구 고르기) | 'setup'(모드·시간 설정) | 'run'(타이머).
@@ -119,15 +184,15 @@ export function renderCardio(el, {
     body = `
       <div class="label" style="margin-bottom:10px">기구 고르기</div>
       <div class="cardio-grid">
-        ${machines.map((m) => `<button class="cardio-pick${m.id === selectedId ? ' on' : ''}" data-mid="${m.id}">${escapeHtml(m.name)}</button>`).join('')}
+        ${machines.map((m) => `<button class="cardio-pick${m.id === selectedId ? ' on' : ''}" data-mid="${escapeHtml(m.id)}">${escapeHtml(m.name)}</button>`).join('')}
       </div>`;
   } else if (view === 'setup') {
     body = `
       <div class="card">
         <div class="label">${escapeHtml(machineName)}</div>
         <div class="seg" style="margin:12px 0 4px">
-          <button class="seg-btn${mode === 'count' ? ' on' : ''}" data-mode="count">카운트다운</button>
-          <button class="seg-btn${mode === 'stop' ? ' on' : ''}" data-mode="stop">스톱워치</button>
+          <button class="seg-btn${mode === 'count' ? ' on' : ''}" data-mode="count" aria-pressed="${mode === 'count'}">카운트다운</button>
+          <button class="seg-btn${mode === 'stop' ? ' on' : ''}" data-mode="stop" aria-pressed="${mode === 'stop'}">스톱워치</button>
         </div>
         ${mode === 'count' ? `
           <div class="cardio-time num">${fmtTime(targetSec)}</div>
@@ -150,10 +215,12 @@ export function renderCardio(el, {
     body = `
       <div class="card" style="text-align:center">
         <div class="label">${escapeHtml(machineName)} · ${mode === 'count' ? '남은 시간' : '경과 시간'}</div>
-        <div class="timer-ring" style="${ring};margin:18px auto"><div class="t">${fmtTime(displaySec)}</div></div>
+        <div class="timer-ring" data-timer="cardio" style="${ring};margin:18px auto"><div class="t" role="timer">${fmtTime(displaySec)}</div></div>
+        <p class="timer-state${paused ? ' paused' : ''}">${paused ? '일시정지 중' : '시간 측정 중'}</p>
+        <p class="input-hint">화면을 꺼도 경과 시간은 반영돼요. 알림음은 기기에 따라 제한될 수 있어요.</p>
         <div class="chip-row" style="gap:8px;margin-top:6px">
           <button class="btn-primary" id="cardio-pause" style="flex:1;background:var(--surface-2);color:var(--text)">${paused ? '재개' : '일시정지'}</button>
-          <button class="btn-primary" id="cardio-finish" style="flex:2">종료 &amp; 기록</button>
+          <button class="btn-primary" id="cardio-finish" style="flex:2">마치고 기록</button>
         </div>
       </div>`;
   }
@@ -163,9 +230,9 @@ export function renderCardio(el, {
       <div class="card cardio-log">
         <div style="flex:1">
           <div style="font-weight:800">${escapeHtml(exerciseName(c.exerciseId))}</div>
-          <div class="hist-meta">${c.date} · ${fmtTime(c.durationSec)}</div>
+          <div class="hist-meta">${escapeHtml(c.date)} · ${fmtTime(c.durationSec)}</div>
         </div>
-        <button class="ord-btn cardio-del" data-cid="${c.id}">✕</button>
+        <button class="ord-btn cardio-del" data-cid="${escapeHtml(c.id)}" aria-label="${escapeHtml(c.date)} ${escapeHtml(exerciseName(c.exerciseId))} 기록 삭제">✕</button>
       </div>`).join('')}` : '';
   el.innerHTML = `<h1>유산소</h1>${body}${recentHtml}`;
 
@@ -219,10 +286,10 @@ export function renderHistory(el, { groups, routineName, exerciseName, noteFor =
       const rows = day.logs
         .map((l) => {
           const chips = l.sets
-            .map((x) => `<span class="set-chip">${x.weight}<small>kg</small>×${x.reps}</span>`)
+            .map((x) => `<span class="set-chip">${escapeHtml(x.weight)}<small>kg</small>×${escapeHtml(x.reps)}</span>`)
             .join('');
           return `<div class="hist-ex">
-            <div class="hist-ex-name">${exerciseName(l.exerciseId)}</div>
+            <div class="hist-ex-name">${escapeHtml(exerciseName(l.exerciseId))}</div>
             <div class="hist-ex-sets">${chips}</div>
           </div>`;
         })
@@ -231,7 +298,7 @@ export function renderHistory(el, { groups, routineName, exerciseName, noteFor =
       const cardioRows = cardio
         .map(
           (c) => `<div class="hist-ex">
-            <div class="hist-ex-name">${exerciseName(c.exerciseId)}</div>
+            <div class="hist-ex-name">${escapeHtml(exerciseName(c.exerciseId))}</div>
             <div class="hist-ex-sets"><span class="set-chip cardio">🏃 ${fmtTime(c.durationSec)}</span></div>
           </div>`
         )
@@ -244,15 +311,15 @@ export function renderHistory(el, { groups, routineName, exerciseName, noteFor =
       ].filter(Boolean).join(' · ');
       return `
       <div class="card hist-card" data-hist="${i}">
-        <div class="hist-head">
+        <button type="button" class="hist-head" aria-expanded="false" aria-controls="history-detail-${i}">
           <div style="flex:1">
             <div class="hist-date">${fmtDayLabel(day.date)}</div>
-            ${names ? `<div class="hist-routine">${names}</div>` : ''}
+            ${names ? `<div class="hist-routine">${escapeHtml(names)}</div>` : ''}
             <div class="hist-meta">${meta}</div>
           </div>
           <span class="hist-caret">▾</span>
-        </div>
-        <div class="hist-detail">
+        </button>
+        <div class="hist-detail" id="history-detail-${i}">
           ${rows}
           ${cardioRows}
           ${note ? `<div class="hist-note"><span class="label">총평</span>${escapeHtml(note)}</div>` : ''}
@@ -262,7 +329,9 @@ export function renderHistory(el, { groups, routineName, exerciseName, noteFor =
     .join('');
 
   hist.querySelectorAll('[data-hist]').forEach((card) => {
-    card.addEventListener('click', () => card.classList.toggle('open'));
+    card.querySelector('.hist-head').addEventListener('click', (event) => {
+      event.currentTarget.setAttribute('aria-expanded', String(card.classList.toggle('open')));
+    });
   });
 }
 
@@ -279,21 +348,20 @@ function groupByPart(exercises) {
   return order.filter((p) => groups.has(p)).map((p) => [p, groups.get(p)]);
 }
 
-export function renderRoutines(el, { routines, exercises, creatingRoutine, editingRoutine, handlers }) {
+export function renderRoutines(el, { routines, exercises, creatingRoutine, editingRoutine, activeRoutineName = null, handlers }) {
   if (creatingRoutine || editingRoutine) {
     renderRoutineForm(el, { exercises, editing: editingRoutine, handlers });
     return;
   }
   el.innerHTML = `
     <h1>루틴</h1>
+    ${activeRoutineName !== null ? `<div class="resume-banner"><div><span class="label">아직 진행 중이에요</span><strong>${escapeHtml(activeRoutineName || '자유 운동')}</strong></div><button class="btn-primary" id="resume-session">계속하기</button></div>` : ''}
     <div id="routine-list"></div>
     <button class="btn-primary" id="add-routine" style="margin-top:12px">+ 루틴 만들기</button>
-    <button class="btn-primary" id="add-exercise" style="margin-top:8px;background:var(--surface-2);color:var(--text)">+ 운동(기구) 직접 추가</button>
-    <button class="btn-primary" id="seed-default" style="margin-top:8px;background:var(--surface-2);color:var(--text)">기본 운동 불러오기</button>
-    <div id="exercise-count" class="dim" style="margin-top:12px;font-size:13px"></div>
+    <details class="exercise-management"><summary>운동 목록 관리 <span id="exercise-count" class="dim"></span></summary><button class="btn-primary btn-secondary" id="add-exercise">+ 운동(기구) 직접 추가</button><button class="btn-primary btn-secondary" id="seed-default">기본 운동 불러오기</button></details>
     <div class="card" style="margin-top:18px">
       <div class="label">데이터 백업</div>
-      <p class="dim" style="font-size:13px;margin:7px 0 12px;line-height:1.5">기기가 저장내용을 지울 때 대비. 파일로 저장해두면 언제든 복원 가능.</p>
+      <p class="dim" style="font-size:13px;margin:7px 0 12px;line-height:1.5">기록은 이 기기에 저장돼요. 기기를 바꾸거나 데이터를 지우기 전에 백업 파일을 저장하세요.</p>
       <div style="display:flex;gap:8px">
         <button class="btn-primary" id="data-export" style="flex:1;background:var(--surface-2);color:var(--text)">↓ 내보내기</button>
         <button class="btn-primary" id="data-import" style="flex:1;background:var(--surface-2);color:var(--text)">↑ 불러오기</button>
@@ -309,18 +377,20 @@ export function renderRoutines(el, { routines, exercises, creatingRoutine, editi
       .map(
         (r) => `
       <div class="card">
-        <div class="label">${r.items.length}개 기구</div>
-        <div style="font-size:18px;font-weight:800;margin:4px 0 10px">${r.name}</div>
-        <div style="display:flex;gap:8px">
-          <button class="btn-primary" data-start="${r.id}" style="flex:2">시작</button>
-          <button class="btn-primary" data-edit="${r.id}" style="flex:1;background:var(--surface-2);color:var(--text)">수정</button>
-          <button class="btn-primary" data-del="${r.id}" style="flex:1;background:var(--surface-2);color:var(--text)">삭제</button>
+        <div class="label">${r.items.length}개 운동 · ${r.items.reduce((total, item) => total + (Number(item.targetSets) || 0), 0)}세트</div>
+        <h2 class="routine-title">${escapeHtml(r.name)}</h2>
+        <p class="routine-preview">${escapeHtml(r.items.map((item) => exercises.find((exercise) => exercise.id === item.exerciseId)?.name || '(삭제됨)').join(' · '))}</p>
+        <div class="routine-actions">
+          <button class="btn-primary" data-start="${escapeHtml(r.id)}">운동 시작</button>
+          <button class="btn-secondary" data-edit="${escapeHtml(r.id)}" aria-label="${escapeHtml(r.name)} 루틴 수정">수정</button>
+          <button class="btn-secondary" data-del="${escapeHtml(r.id)}" aria-label="${escapeHtml(r.name)} 루틴 삭제">삭제</button>
         </div>
       </div>`
       )
       .join('');
   }
-  el.querySelector('#exercise-count').textContent = `등록된 운동 ${exercises.length}개`;
+  el.querySelector('#exercise-count').textContent = `${exercises.length}개`;
+  el.querySelector('#resume-session')?.addEventListener('click', () => handlers.onResume());
 
   list.querySelectorAll('[data-start]').forEach((b) =>
     b.addEventListener('click', () => handlers.onStart(b.dataset.start))
@@ -360,11 +430,11 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
     : [];
   el.innerHTML = `
     <h1>${editing ? '루틴 수정' : '새 루틴'}</h1>
-    <input id="r-name" type="text" placeholder="루틴 이름 (예: 가슴날)" value="${editing ? escapeHtml(editing.name) : ''}">
+    <label class="field-label" for="r-name">루틴 이름</label><input id="r-name" type="text" placeholder="예: 가슴·삼두" value="${editing ? escapeHtml(editing.name) : ''}">
     <div class="label" style="margin:18px 0 6px">운동 순서 <span class="dim" style="font-weight:600;text-transform:none;letter-spacing:0">· 하는 순서대로 ▲▼</span></div>
     <div id="ex-order"></div>
     <div class="label" style="margin:18px 0 8px">운동 고르기 <span class="dim" style="font-weight:600;text-transform:none;letter-spacing:0">· 부위 눌러 펼치기</span></div>
-    <input id="ex-search" type="text" placeholder="🔍 운동 이름 검색" autocomplete="off" style="margin-bottom:10px">
+    <input id="ex-search" type="text" aria-label="운동 이름 검색" placeholder="운동 이름 검색" autocomplete="off" style="margin-bottom:10px">
     <div id="ex-pick"></div>
     <div class="form-actions">
       <button class="btn-primary" id="cancel-routine" style="flex:1;background:var(--surface-2);color:var(--text)">취소</button>
@@ -375,13 +445,15 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
   // ── 순서 리스트: 선택된 운동을 실제 하는 순서대로 ▲▼로 재정렬, ✕로 제외 ──
   const orderWrap = el.querySelector('#ex-order');
   const orderRow = (id) =>
-    `<div class="setrow" data-ord="${id}" style="display:flex;align-items:center;gap:8px">
+    `<div class="setrow" data-ord="${escapeHtml(id)}" style="display:flex;align-items:center;gap:8px">
       <span style="flex:1">${escapeHtml(byId.get(id)?.name ?? '(삭제됨)')}</span>
-      <button class="ord-btn ord-up">▲</button>
-      <button class="ord-btn ord-down">▼</button>
-      <button class="ord-btn ord-del">✕</button>
+      <button class="ord-btn ord-up" aria-label="${escapeHtml(byId.get(id)?.name ?? '운동')} 순서 위로">▲</button>
+      <button class="ord-btn ord-down" aria-label="${escapeHtml(byId.get(id)?.name ?? '운동')} 순서 아래로">▼</button>
+      <button class="ord-btn ord-del" aria-label="${escapeHtml(byId.get(id)?.name ?? '운동')} 루틴에서 제외">✕</button>
     </div>`;
   const currentOrder = () => [...orderWrap.querySelectorAll('[data-ord]')].map((r) => r.dataset.ord);
+  const findOrder = (id) => [...orderWrap.querySelectorAll('[data-ord]')].find((row) => row.dataset.ord === id);
+  const findCheckbox = (id) => [...el.querySelectorAll('.ex-check')].find((checkbox) => checkbox.value === id);
   function wireOrder() {
     orderWrap.querySelectorAll('[data-ord]').forEach((row) => {
       row.querySelector('.ord-up').onclick = () => {
@@ -401,15 +473,15 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
     }
   }
   function addToOrder(id) {
-    if (orderWrap.querySelector(`[data-ord="${id}"]`)) return;
+    if (findOrder(id)) return;
     if (currentOrder().length === 0) orderWrap.innerHTML = ''; // placeholder 제거
     orderWrap.insertAdjacentHTML('beforeend', orderRow(id));
     wireOrder();
   }
   function removeFromOrder(id) {
-    const row = orderWrap.querySelector(`[data-ord="${id}"]`);
+    const row = findOrder(id);
     if (row) row.remove();
-    const cb = el.querySelector(`.ex-check[value="${id}"]`);
+    const cb = findCheckbox(id);
     if (cb) cb.checked = false;
     updateCountFor(id);
     renderEmptyIfNeeded();
@@ -422,7 +494,7 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
   const checkedIds = new Set(initialIds);
   const pick = el.querySelector('#ex-pick');
   function updateCountFor(id) {
-    const acc = pick.querySelector(`.ex-check[value="${id}"]`)?.closest('.acc');
+    const acc = findCheckbox(id)?.closest('.acc');
     if (acc) refreshCount(acc);
   }
   function refreshCount(acc) {
@@ -438,7 +510,7 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
         const sel = list.filter((e) => checkedIds.has(e.id)).length;
         return `
       <div class="acc${sel ? ' open' : ''}" data-part="${escapeHtml(part)}">
-        <button type="button" class="acc-head">
+        <button type="button" class="acc-head" aria-expanded="${sel > 0}">
           <span class="acc-title">${escapeHtml(part)}</span>
           <span class="acc-count">${sel ? `<b>${sel}</b>/${list.length}` : list.length}</span>
           <span class="acc-caret">▾</span>
@@ -448,7 +520,7 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
             .map(
               (ex) => `
             <label class="pick-row" data-name="${escapeHtml(ex.name)}">
-              <input type="checkbox" class="ex-check" value="${ex.id}" ${checkedIds.has(ex.id) ? 'checked' : ''}>
+              <input type="checkbox" class="ex-check" value="${escapeHtml(ex.id)}" ${checkedIds.has(ex.id) ? 'checked' : ''}>
               <span>${escapeHtml(ex.name)}</span>
             </label>`
             )
@@ -459,7 +531,7 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
       .join('');
 
     pick.querySelectorAll('.acc-head').forEach((h) =>
-      h.addEventListener('click', () => h.closest('.acc').classList.toggle('open'))
+      h.addEventListener('click', () => h.setAttribute('aria-expanded', String(h.closest('.acc').classList.toggle('open'))))
     );
     pick.querySelectorAll('.ex-check').forEach((cb) => {
       cb.addEventListener('change', () => {
@@ -482,6 +554,7 @@ function renderRoutineForm(el, { exercises, editing, handlers }) {
         acc.style.display = visible ? '' : 'none';
         if (q) acc.classList.add('open');
         else acc.classList.toggle('open', acc.querySelector('.ex-check:checked') != null);
+        acc.querySelector('.acc-head').setAttribute('aria-expanded', String(acc.classList.contains('open')));
       });
     });
   }
@@ -507,9 +580,9 @@ export function renderCalendar(el, { month, sessionDates, schedule, notes = {}, 
 
   el.innerHTML = `
     <div class="cal-nav">
-      <button class="icon-btn" id="cal-prev">◀</button>
+      <button class="icon-btn" id="cal-prev" aria-label="이전 달">◀</button>
       <h1 style="margin:0">${title}</h1>
-      <button class="icon-btn" id="cal-next">▶</button>
+      <button class="icon-btn" id="cal-next" aria-label="다음 달">▶</button>
     </div>
     <div class="cal-grid">
       ${MONTH_GRID_HEAD.map((d, i) => `<div class="cal-head${i === 0 ? ' sun' : i === 6 ? ' sat' : ''}">${d}</div>`).join('')}
@@ -524,9 +597,9 @@ export function renderCalendar(el, { month, sessionDates, schedule, notes = {}, 
           const isToday = cell.dateKey === todayKey;
           const cls = ['cal-cell', did ? 'did' : '', sel ? 'sel' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
           return `
-          <button class="${cls}" data-day="${cell.dateKey}">
+          <button class="${cls}" data-day="${cell.dateKey}" aria-pressed="${sel}" aria-label="${cell.dateKey}${did ? ', 운동 기록 있음' : ''}${rid ? `, ${escapeHtml(routineName(rid))} 예정` : ''}${hasNote ? ', 메모 있음' : ''}">
             <span class="cal-num">${cell.day}</span>
-            ${rid ? `<span class="cal-tag">${routineName(rid)}</span>` : ''}
+            ${rid ? `<span class="cal-tag">${escapeHtml(routineName(rid))}</span>` : ''}
             <span class="cal-marks">${did ? '<i class="mk-did"></i>' : ''}${hasNote ? '<i class="mk-note"></i>' : ''}</span>
           </button>`;
         })
@@ -554,7 +627,7 @@ export function renderCalendar(el, { month, sessionDates, schedule, notes = {}, 
           ${routines.length === 0 ? '<span class="dim">루틴이 없음. 루틴 탭에서 먼저 만들어줘.</span>' : ''}
           ${routines
             .map(
-              (r) => `<button class="pill cal-assign${cur === r.id ? ' on' : ''}" data-rid="${r.id}">${r.name}</button>`
+              (r) => `<button class="pill cal-assign${cur === r.id ? ' on' : ''}" data-rid="${escapeHtml(r.id)}" aria-pressed="${cur === r.id}">${escapeHtml(r.name)}</button>`
             )
             .join('')}
           ${cur ? `<button class="pill" id="cal-clear">지우기</button>` : ''}
@@ -562,7 +635,7 @@ export function renderCalendar(el, { month, sessionDates, schedule, notes = {}, 
       </div>
       <div class="card">
         <div class="label">${worked_ ? '운동 총평 ✍️' : '이 날 메모'}</div>
-        <textarea id="cal-note" class="note-area" rows="3"
+        <textarea id="cal-note" class="note-area" rows="3" aria-label="${Number(m)}월 ${Number(d)}일 메모"
           placeholder="${worked_ ? '컨디션, 무게 느낌, 다음에 바꿀 점…' : '이 날에 대한 메모'}">${escapeHtml(note)}</textarea>
         <div class="chip-row" style="justify-content:flex-end;margin-top:10px">
           ${note ? `<button class="pill" id="note-del">삭제</button>` : ''}

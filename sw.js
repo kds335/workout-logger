@@ -1,4 +1,4 @@
-const CACHE = 'workout-logger-v9';
+const CACHE = 'workout-logger-v10';
 const ASSETS = [
   './', './index.html', './styles.css',
   './src/main.js', './src/ui.js', './src/store.js',
@@ -14,10 +14,11 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k.startsWith('workout-logger-') && k !== CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
 self.addEventListener('fetch', (e) => {
-  e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== self.location.origin) return;
+  e.respondWith(caches.open(CACHE).then((cache) => cache.match(e.request)).then((r) => r || fetch(e.request)));
 });
