@@ -55,3 +55,35 @@ test('백업 export/import에 유산소 포함', () => {
   assert.equal(dst.listCardioSessions().length, 1);
   assert.equal(dst.listCardioSessions()[0].durationSec, 1500);
 });
+
+test('같은 타이머 id로 저장을 재시도해도 한 번만 기록됨', () => {
+  const backend = fakeBackend();
+  const s = makeStore(backend);
+  const first = s.addCardioSession({ id: 'timer-1', exerciseId: 'run', durationSec: 100, date: '2026-09-30' });
+  assert.equal(s.addCardioSession({ id: 'timer-1', exerciseId: 'run', durationSec: 110, date: '2026-09-30' }), first);
+  const restored = makeStore(backend);
+  restored.addCardioSession({ id: 'timer-1', exerciseId: 'run', durationSec: 120, date: '2026-09-30' });
+  assert.equal(restored.listCardioSessions().length, 1);
+  assert.equal(restored.listCardioSessions()[0].durationSec, 100);
+});
+
+test('유산소 저장 실패 후 동일 id 재시도 시 기록을 잃지 않음', () => {
+  const backend = fakeBackend();
+  const s = makeStore(backend);
+  const save = backend.setItem;
+  backend.setItem = () => { throw new Error('QuotaExceededError'); };
+  const entry = { id: 'timer-1', exerciseId: 'run', durationSec: 100, date: '2026-09-30' };
+  assert.throws(() => s.addCardioSession(entry), /QuotaExceededError/);
+  assert.deepEqual(s.listCardioSessions(), []);
+  backend.setItem = save;
+  s.addCardioSession(entry);
+  assert.equal(makeStore(backend).listCardioSessions().length, 1);
+});
+
+test('잘못된 유산소 시간은 기록되지 않음', () => {
+  const s = makeStore();
+  for (const durationSec of [-1, NaN, Infinity, '100']) {
+    assert.throws(() => s.addCardioSession({ exerciseId: 'run', durationSec, date: '2026-09-30' }));
+  }
+  assert.deepEqual(s.listCardioSessions(), []);
+});
