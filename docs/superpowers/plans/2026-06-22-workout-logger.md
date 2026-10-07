@@ -1,6 +1,8 @@
 # 운동기록 웹앱 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> 과거 구현 계획 · 안내 추가 2026-10-07: 아래 기술 내용·명령·체크박스는 2026-06-22 당시 계획 기록이다. 현재 기능·실행·검증 범위는 [프로젝트 README](../../../README.md)를 우선한다. 체크박스가 비어 있어도 현재 미완료 작업이나 자동 실행 요청으로 해석하지 않는다. 과거 도구 설치·위임·커밋 방식을 재실행하지 않으며, 체크박스와 기술 내용은 보존한다.
+
+당시 도구 설정은 `superpowers:subagent-driven-development` 또는 `superpowers:executing-plans`를 사용하는 방식이었고, 단계 추적에 체크박스(`- [ ]`)를 지정했다. 이는 과거 설정 기록이며 현재 필수 스킬·위임 지시가 아니다.
 
 **Goal:** 헬스장에서 루틴 짜기 + 세트별 무게/반복 기록 + 휴식 타이머 자동 + 지난기록 조회를 한 흐름으로 하는 개인용 PWA를 만든다.
 
@@ -17,7 +19,7 @@
 - 단위 테스트는 `tests/`(복수)에 둔다.
 - 화풍 = 미드나잇: 다크 배경 `#0d0f14`, 형광 그린 액센트 `#00e599`. 색·간격·둥글기는 CSS 변수(디자인 토큰)로만.
 - TDD: 실패 테스트 → 최소 구현 → 통과 → 커밋. 태스크당 1커밋.
-- 커밋 메시지 한국어 산문 + Conventional Commits 접두사. 끝에 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- 당시 커밋 형식 설정: 한국어 산문 + Conventional Commits 접두사와 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` 표기를 지정했다. 이 표기는 과거 설정 기록이며 현재 커밋에 자동으로 붙이지 않는다. 실제 참여자를 확인한 경우에만 현재 작업의 저자 정보를 기록한다.
 - 데이터 형태(전 태스크 공통):
   - `Exercise = { id, name, type, defaultRestSec }`, `type ∈ '머신'|'덤벨'|'케이블'|'기타'`
   - `Routine = { id, name, items: [{ exerciseId, targetSets, restSec }] }`
